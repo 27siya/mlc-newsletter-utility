@@ -7,7 +7,7 @@
  * above it to defer to, since this project has a single document type.
  */
 
-const STAT = { diagnostics: null, running: false, showDiagnostics: false, showEmbed: false, showHistory: false };
+const STAT = { diagnostics: null, running: false, showDiagnostics: false, showEmbed: true, showHistory: true };
 
 function renderStatusSidebar(host) {
   const s = (STATE.liveStatus || {})[STATE.mode];
