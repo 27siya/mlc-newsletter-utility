@@ -23,9 +23,6 @@ const PUB = {
   // no calendar engine here to suggest one from), so there is nothing to
   // protect against editing in the first place.
   lockArchiveName: true,
-  // Notes starts unlocked too — there is no suggested value here to protect;
-  // it's blank until the admin writes one.
-  lockNotes: false,
   busy: false,
   initialised: false
 };
@@ -43,7 +40,7 @@ function toggleLock(flagName) {
   PUB[flagName] = !PUB[flagName];
   render();
   if (!PUB[flagName]) {
-    const ids = { lockArchiveName: 'pub-archive-name', lockNotes: 'pub-notes' };
+    const ids = { lockArchiveName: 'pub-archive-name' };
     const el = document.getElementById(ids[flagName]);
     if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
   }
@@ -151,12 +148,8 @@ function renderPublish(host) {
       '</div>' +
 
       '<div class="mb-6">' +
-        '<div class="label-row">' +
-          '<label class="field-label" for="pub-notes">Notes <span class="normal-case tracking-normal">(optional)</span></label>' +
-          lockToggle('lockNotes') +
-        '</div>' +
+        '<label class="field-label" for="pub-notes">Notes <span class="normal-case tracking-normal">(optional)</span></label>' +
         '<input type="text" id="pub-notes" class="field" value="' + escapeHtml(PUB.notes) + '" ' +
-          (PUB.lockNotes ? 'readonly ' : '') +
           'placeholder="e.g. corrected page 3 typo" oninput="PUB.notes=this.value">' +
       '</div>' +
 
@@ -348,7 +341,6 @@ function resetPublishForm() {
   PUB.issueName = '';
   PUB.nameEdited = false;
   PUB.lockArchiveName = true;
-  PUB.lockNotes = false;
   PUB.month = STATE.boot.defaultMonth;
   onMonthChanged(true);
 }
