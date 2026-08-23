@@ -6,7 +6,7 @@
  */
 
 // Build number — auto-bumped by deploy.ps1 on each deploy.
-const PORTAL_BUILD = 4;
+const PORTAL_BUILD = 5;
 
 const GLOBAL_CONFIG = {
   // Root Drive folder holding the live file and the archive subfolder.

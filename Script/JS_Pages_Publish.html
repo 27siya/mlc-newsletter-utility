@@ -17,12 +17,13 @@ const PUB = {
   file: null,
   existing: [],
   nameEdited: false,
-  // Archive Filename starts locked: it is pre-filled correctly from the
-  // month/year, and an accidental keystroke in it is easy to miss. Issue
-  // Name starts unlocked — there is no computed suggestion for it (there's
-  // no calendar engine here to suggest one from), so there is nothing to
-  // protect against editing in the first place.
+  // Archive Filename and Notes both start locked: a stray click or keystroke
+  // shouldn't quietly change either one, so editing either requires the
+  // deliberate act of unlocking it first. Issue Name is the one exception —
+  // there is no computed suggestion for it (there's no calendar engine here
+  // to suggest one from), so there is nothing pre-filled to protect.
   lockArchiveName: true,
+  lockNotes: true,
   busy: false,
   initialised: false
 };
@@ -40,7 +41,7 @@ function toggleLock(flagName) {
   PUB[flagName] = !PUB[flagName];
   render();
   if (!PUB[flagName]) {
-    const ids = { lockArchiveName: 'pub-archive-name' };
+    const ids = { lockArchiveName: 'pub-archive-name', lockNotes: 'pub-notes' };
     const el = document.getElementById(ids[flagName]);
     if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
   }
@@ -148,8 +149,12 @@ function renderPublish(host) {
       '</div>' +
 
       '<div class="mb-6">' +
-        '<label class="field-label" for="pub-notes">Notes <span class="normal-case tracking-normal">(optional)</span></label>' +
+        '<div class="label-row">' +
+          '<label class="field-label" for="pub-notes">Notes <span class="normal-case tracking-normal">(optional)</span></label>' +
+          lockToggle('lockNotes') +
+        '</div>' +
         '<input type="text" id="pub-notes" class="field" value="' + escapeHtml(PUB.notes) + '" ' +
+          (PUB.lockNotes ? 'readonly ' : '') +
           'placeholder="e.g. corrected page 3 typo" oninput="PUB.notes=this.value">' +
       '</div>' +
 
@@ -341,6 +346,7 @@ function resetPublishForm() {
   PUB.issueName = '';
   PUB.nameEdited = false;
   PUB.lockArchiveName = true;
+  PUB.lockNotes = true;
   PUB.month = STATE.boot.defaultMonth;
   onMonthChanged(true);
 }
