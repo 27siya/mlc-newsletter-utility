@@ -65,8 +65,8 @@ function helpGuideSections_() {
         'now undated.',
         '   • Delete File — moves the file to Drive’s bin (recoverable there for about 30 days). Requires ' +
         'typing DELETE to confirm. The live file itself can never be deleted this way.',
-        '"Files Without A Service Date" lists documents sitting in the archive folder that were filed by hand. ' +
-        'Give one a month/year with "Set Service Date", or publish it straight to live with "Publish As Live" — ' +
+        '"Files Without An Issue Month" lists documents sitting in the archive folder that were filed by hand. ' +
+        'Give one a month/year with "Set Issue Month", or publish it straight to live with "Publish As Live" — ' +
         'the period is asked for first, since a published document must always have one.'
       ]
     },
@@ -82,7 +82,7 @@ function helpGuideSections_() {
     {
       heading: 'A Live File With No Issue Date',
       body: [
-        'The very first newsletter file may show "no service date recorded" if it was published before this ' +
+        'The very first newsletter file may show "no issue month recorded" if it was published before this ' +
         'utility existed. A prompt to set one appears wherever this is noticed — on the sidebar and on the ' +
         'Publish tab. Setting it takes a permanent copy into the archive and records it; the live file itself ' +
         'is untouched.'

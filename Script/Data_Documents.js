@@ -615,7 +615,7 @@ function deleteIndexRow_(rowNumber) {
 
 /**
  * Detach a document from its issue period. The file is untouched and returns
- * to the "files without a service date" list, ready to be re-dated.
+ * to the "files without an issue month" list, ready to be re-dated.
  */
 function unassignRecord(recordId) {
   requireAdmin_();
