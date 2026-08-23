@@ -1,0 +1,459 @@
+<script>
+/**
+ * Publish tab.
+ *
+ * The issue period (Month + Year) is the pivot of the whole screen: choosing
+ * it decides whether this is a new publication or an update to an existing
+ * one, and it drives the suggested filename. The filename suggestion is
+ * freely editable — nothing downstream reads meaning back out of a filename.
+ */
+
+const PUB = {
+  month: '',       // yyyy-MM, from the <input type="month">
+  date: '',        // yyyy-MM-01, normalised — what the server actually uses
+  issueName: '',
+  archiveName: '',
+  notes: '',
+  file: null,
+  existing: [],
+  nameEdited: false,
+  // Archive Filename starts locked: it is pre-filled correctly from the
+  // month/year, and an accidental keystroke in it is easy to miss. Issue
+  // Name starts unlocked — there is no computed suggestion for it (there's
+  // no calendar engine here to suggest one from), so there is nothing to
+  // protect against editing in the first place.
+  lockArchiveName: true,
+  // Notes starts unlocked too — there is no suggested value here to protect;
+  // it's blank until the admin writes one.
+  lockNotes: false,
+  busy: false,
+  initialised: false
+};
+
+/** The small Edit / Lock control that sits beside a locked field's label. */
+function lockToggle(flagName) {
+  const locked = PUB[flagName];
+  return '<button type="button" class="lock-toggle' + (locked ? '' : ' is-editing') + '" onclick="toggleLock(&quot;' + flagName + '&quot;)" ' +
+    'title="' + (locked ? 'Unlock this field to edit it' : 'Lock this field') + '">' +
+    (locked ? '&#128274; Locked &mdash; Click To Edit' : '&#128275; Editing &mdash; Click To Lock') +
+    '</button>';
+}
+
+function toggleLock(flagName) {
+  PUB[flagName] = !PUB[flagName];
+  render();
+  if (!PUB[flagName]) {
+    const ids = { lockArchiveName: 'pub-archive-name', lockNotes: 'pub-notes' };
+    const el = document.getElementById(ids[flagName]);
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }
+}
+
+/** Is any existing record for this issue currently the live document? */
+function existingIsLive() {
+  return PUB.existing.some(r => r.status === 'LIVE');
+}
+
+function liveButtonLabel() {
+  if (!PUB.existing.length) return 'Upload &amp; Publish As Live';
+  if (existingIsLive()) return 'Replace Live Document';
+  return 'Update &amp; Publish As Live';
+}
+
+function archiveOnlyButtonLabel() {
+  if (!PUB.existing.length) return 'Upload Only';
+  // Choosing "file it, don't go live" when the existing document for this
+  // issue IS the live one means: the live slot loses its record for this
+  // issue and nothing new takes its place live. Name that plainly rather
+  // than calling it "Upload Only", which would understate what happens.
+  if (existingIsLive()) return 'Replace Current &amp; Unset Live';
+  return 'Upload As Newer Draft';
+}
+
+function uploadButtonsHint() {
+  if (existingIsLive()) {
+    return '<strong>Replace Live Document</strong> makes this the one the congregation sees right now. ' +
+      '<strong>Replace Current &amp; Unset Live</strong> files this instead of the current live document, ' +
+      'without anything new going live &mdash; the newsletter link will show nothing live until you activate ' +
+      'something.';
+  }
+  if (PUB.existing.length) {
+    return '<strong>Update &amp; Publish As Live</strong> files the document and makes it the one the congregation sees. ' +
+      '<strong>Upload As Newer Draft</strong> files it in the archive alongside the existing one, without changing ' +
+      'what is currently live.';
+  }
+  return '<strong>Upload &amp; Publish As Live</strong> files the document and makes it the one the congregation sees. ' +
+    '<strong>Upload Only</strong> files it in the archive and leaves the live newsletter exactly as it is.';
+}
+
+function renderPublish(host) {
+  if (!PUB.initialised) {
+    PUB.month = STATE.boot.defaultMonth;
+    PUB.date = STATE.boot.defaultDate;
+    PUB.initialised = true;
+    // Fire-and-forget: fills in the filename and any existing-document warning.
+    setTimeout(() => onMonthChanged(true), 0);
+  }
+
+  const live = (STATE.liveStatus && STATE.liveStatus[STATE.mode]) || null;
+  const updating = PUB.existing.length > 0;
+
+  host.innerHTML =
+    liveStrip(live) +
+
+    '<section class="mlc-panel p-5 sm:p-6 mb-5">' +
+      '<div class="flex items-baseline justify-between mb-5 flex-wrap gap-2">' +
+        '<h2 class="font-display text-2xl" style="color: var(--mlc-gold-light);">' +
+          (updating ? 'Update The Newsletter' : 'Publish A Newsletter') +
+        '</h2>' +
+      '</div>' +
+
+      // --- Issue period: the first step. Everything that follows — the
+      //     upload, the suggested filename, the existing-document check —
+      //     depends on this being set first, so it comes before the
+      //     dropzone now. ---
+      '<div class="mb-5 sm:max-w-xs">' +
+        '<label class="field-label" for="pub-month">Issue Month</label>' +
+        '<input type="month" id="pub-month" class="field" value="' + PUB.month + '" onchange="PUB.month=this.value; onMonthChanged()">' +
+        (PUB.date ? '<div class="date-readout">' + formatDisplayDate(PUB.date) + '</div>' : '') +
+        '<p class="field-hint">Defaults to the current month. This is what binds the file to an issue.</p>' +
+      '</div>' +
+
+      // --- Upload ---
+      '<div class="mb-5">' +
+        '<label class="field-label">Document &mdash; One File At A Time</label>' +
+        dropzone() +
+      '</div>' +
+
+      // --- Existing-document notice ---
+      existingNotice() +
+
+      // --- Issue name ---
+      '<div class="mb-5">' +
+        '<div class="label-row">' +
+          '<label class="field-label" for="pub-issue-name">Issue Name <span class="normal-case tracking-normal">(optional)</span></label>' +
+        '</div>' +
+        '<input type="text" id="pub-issue-name" class="field" value="' + escapeHtml(PUB.issueName) + '" ' +
+          'placeholder="e.g. Second Quarter Edition" oninput="PUB.issueName=this.value">' +
+        '<p class="field-hint">Whatever this issue is called, if it has a name. Shown on the sidebar and in the archive.</p>' +
+      '</div>' +
+
+      // --- Archive filename ---
+      '<div class="mb-5">' +
+        '<div class="label-row">' +
+          '<label class="field-label" for="pub-archive-name">Archive Filename</label>' + lockToggle('lockArchiveName') +
+        '</div>' +
+        '<input type="text" id="pub-archive-name" class="field" value="' + escapeHtml(PUB.archiveName) + '" ' +
+          (PUB.lockArchiveName ? 'readonly ' : '') +
+          'oninput="PUB.archiveName=this.value; PUB.nameEdited=true">' +
+        '<p class="field-hint">Name of the permanent copy kept in the archive. Rename it freely &mdash; ' +
+          'the issue month above is what the system actually goes by.</p>' +
+      '</div>' +
+
+      '<div class="mb-6">' +
+        '<div class="label-row">' +
+          '<label class="field-label" for="pub-notes">Notes <span class="normal-case tracking-normal">(optional)</span></label>' +
+          lockToggle('lockNotes') +
+        '</div>' +
+        '<input type="text" id="pub-notes" class="field" value="' + escapeHtml(PUB.notes) + '" ' +
+          (PUB.lockNotes ? 'readonly ' : '') +
+          'placeholder="e.g. corrected page 3 typo" oninput="PUB.notes=this.value">' +
+      '</div>' +
+
+      '<div class="flex flex-wrap gap-3 items-center">' +
+        '<button id="pub-live" class="btn btn-primary" ' + (PUB.busy || !PUB.file ? 'disabled' : '') +
+          ' onclick="submitPublish({ goLive: true })">' +
+          (PUB.busy === 'LIVE' ? '<span class="spinner w-4 h-4"></span> Publishing' : liveButtonLabel()) +
+        '</button>' +
+        '<button id="pub-only" class="btn btn-secondary" ' + (PUB.busy || !PUB.file ? 'disabled' : '') +
+          ' onclick="submitPublish({ archiveOnly: true })">' +
+          (PUB.busy === 'ARCHIVE' ? '<span class="spinner w-4 h-4"></span> Uploading' : archiveOnlyButtonLabel()) +
+        '</button>' +
+        '<button class="btn btn-ghost" ' + (PUB.busy ? 'disabled' : '') + ' onclick="resetPublishForm()">Reset</button>' +
+      '</div>' +
+      '<p class="field-hint mt-3">' +
+        (PUB.file
+          ? uploadButtonsHint()
+          : 'Choose a file to enable uploading.') +
+      '</p>' +
+    '</section>';
+}
+
+/** The live-file summary that sits above the form. */
+function liveStrip(live) {
+  if (!live) return '';
+
+  if (!live.exists) {
+    return '<div class="alert alert-info mb-5">' +
+      'No live <strong>newsletter</strong> file exists yet. Publishing will create ' +
+      '<span class="mono">' + escapeHtml(live.fileName) + '</span> in the Drive folder and share it read-only with the congregation.' +
+      '</div>';
+  }
+
+  if (live.placeholderActive) {
+    const d = live.disabledRecord;
+    return '<section class="mlc-panel-inset p-4 mb-5">' +
+      '<p class="text-xs tracking-[0.1em] uppercase font-bold mb-1" style="color: var(--mlc-muted);">' +
+        'Currently Live &mdash; Newsletter</p>' +
+      '<div class="alert alert-warn text-[13px]">' +
+        '<strong>The newsletter is disabled</strong> &mdash; the website is showing the ' +
+        '&ldquo;document to be published&rdquo; placeholder' +
+        (d ? ', in place of ' + escapeHtml(d.issueName || d.archiveFileName) : '') + '. ' +
+        'Re-enable it from the panel to the right, or publish a new document below.' +
+      '</div>' +
+    '</section>';
+  }
+
+  const rec = live.record;
+  return '<section class="mlc-panel-inset p-4 mb-5 flex flex-wrap items-center justify-between gap-3">' +
+    '<div class="min-w-0">' +
+      '<p class="text-xs tracking-[0.1em] uppercase font-bold mb-1" style="color: var(--mlc-muted);">Currently Live &mdash; Newsletter</p>' +
+      '<p class="font-serif-body text-base truncate" style="color: var(--mlc-text);">' +
+        escapeHtml(rec && rec.issueName ? rec.issueName : live.fileName) + '</p>' +
+      '<p class="text-xs mt-0.5" style="color: var(--mlc-muted);">' +
+        (rec && rec.issueDate ? 'Issue of ' + formatDisplayDate(rec.issueDate) + ' &middot; ' : '') +
+        'updated ' + escapeHtml(live.lastUpdated) + ' &middot; ' + escapeHtml(live.size) +
+      '</p>' +
+      // The same fix is offered wherever the gap is visible, not only in the
+      // sidebar. Worded to make clear this is about the LIVE file
+      // specifically — dating a copy in the Archive does not change what
+      // is live.
+      (rec && rec.issueDate
+        ? ''
+        : '<p class="text-xs mt-1.5" style="color: var(--mlc-gold-light);">' +
+            'This live file has not been dated &mdash; ' +
+            '<button class="underline font-bold" onclick="openDateCurrentLive(&quot;' + STATE.mode + '&quot;)">' +
+            'date it now</button></p>') +
+      (rec && rec.notes
+        ? '<p class="text-xs italic mt-1.5" style="color: var(--mlc-blue-deep);">&ldquo;' + escapeHtml(rec.notes) + '&rdquo;</p>'
+        : '') +
+    '</div>' +
+    '<div class="flex gap-2 flex-shrink-0">' +
+      linkChips(live.links, null, (rec && rec.issueName) || live.fileName, {
+        fileName: live.fileName,
+        status: 'LIVE',
+        issueDate: rec ? rec.issueDate : '',
+        updated: live.lastUpdated,
+        size: live.size,
+        notes: rec ? rec.notes : ''
+      }) +
+    '</div>' +
+  '</section>';
+}
+
+/** Banner that turns the form from "publish new" into "update existing". */
+function existingNotice() {
+  if (!PUB.existing.length) return '';
+  const rows = PUB.existing.map(r =>
+    '<li class="mt-1">&bull; <span class="font-serif-body">' + escapeHtml(r.archiveFileName) + '</span>' +
+    ' <span style="color: var(--mlc-muted);">(' + escapeHtml(r.status.toLowerCase()) +
+    ', published ' + escapeHtml(r.publishedAt) + ' by ' + escapeHtml(r.publishedBy) + ')</span></li>'
+  ).join('');
+
+  return '<div class="alert alert-warn mb-5">' +
+    '<strong>A document is already published for ' + formatDisplayDate(PUB.date) + '.</strong>' +
+    '<ul class="mt-2 text-[13px]">' + rows + '</ul>' +
+    '<p class="mt-2 text-[13px]">Publishing again files this upload as the newer version and marks the one above as superseded. ' +
+    'The existing file stays in the archive.</p>' +
+  '</div>';
+}
+
+function dropzone() {
+  const f = PUB.file;
+  return '<div class="dropzone ' + (f ? 'has-file' : '') + '" id="pub-dropzone" ' +
+      'onclick="document.getElementById(\'pub-file\').click()" ' +
+      'ondragover="event.preventDefault(); this.classList.add(\'dragging\')" ' +
+      'ondragleave="this.classList.remove(\'dragging\')" ' +
+      'ondrop="handleDrop(event)">' +
+    '<input type="file" id="pub-file" class="hidden" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" ' +
+      'onchange="handleFilePicked(this.files[0])">' +
+    (f
+      ? '<p class="font-serif-body text-base mb-1" style="color: var(--mlc-text);">' + escapeHtml(f.name) + '</p>' +
+        '<p class="text-xs" style="color: var(--mlc-muted);">' + humanSize(f.size) +
+        (isWordFile(f) ? ' &middot; will be converted to PDF, with the Word file kept in the archive' : '') + '</p>' +
+        '<p class="text-[10px] tracking-[0.14em] uppercase mt-3" style="color: var(--mlc-gold);">Click to choose a different file</p>'
+      : '<p class="text-sm mb-1" style="color: var(--mlc-stone);">Drop the PDF or Word document here</p>' +
+        '<p class="text-xs" style="color: var(--mlc-muted);">or click to browse &mdash; max ' +
+        humanSize(STATE.boot.maxUploadBytes) + '. Compress large Canva exports first.</p>'
+  ) +
+  '</div>';
+}
+
+function isWordFile(file) {
+  return /\.(docx?|DOCX?)$/.test(file.name) ||
+    file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    file.type === 'application/msword';
+}
+
+// ---------- Interactions ----------
+
+function handleDrop(event) {
+  event.preventDefault();
+  document.getElementById('pub-dropzone').classList.remove('dragging');
+
+  const files = event.dataTransfer.files;
+  if (!files || !files.length) return;
+
+  // One document per issue. Taking the first of several silently would be a
+  // guess at which one was meant.
+  if (files.length > 1) {
+    toast('One file at a time — a publish is a single document.', 'error');
+    return;
+  }
+  handleFilePicked(files[0]);
+}
+
+function handleFilePicked(file) {
+  if (!file) return;
+  if (file.size > STATE.boot.maxUploadBytes) {
+    toast('That file is ' + humanSize(file.size) + ' — larger than the ' + humanSize(STATE.boot.maxUploadBytes) +
+      ' limit. Compress it in Canva (or Acrobat/an online PDF compressor) before uploading.', 'error');
+    return;
+  }
+  if (!/\.(pdf|docx?|PDF|DOCX?)$/.test(file.name)) {
+    toast('Upload a PDF or a Word document.', 'error');
+    return;
+  }
+  PUB.file = file;
+  render();
+}
+
+/**
+ * Month changed: find out whether this issue period already has a document.
+ */
+async function onMonthChanged(silent) {
+  if (!PUB.month) return;
+  PUB.date = PUB.month + '-01';
+  try {
+    const [suggestRes, existingRes] = await Promise.all([
+      callServer('suggestForDate', STATE.mode, PUB.date),
+      callServer('checkExistingForDate', STATE.mode, PUB.date)
+    ]);
+
+    PUB.existing = existingRes.data.records || [];
+    if (!PUB.nameEdited) PUB.archiveName = suggestRes.data.suggestedFileName;
+
+    if (!silent && PUB.existing.length) {
+      toast('A document already exists for this issue — this will publish an update.', 'warn');
+    }
+    render();
+  } catch (e) {
+    if (!silent) toast(e.message, 'error');
+  }
+}
+
+function resetPublishForm() {
+  PUB.file = null;
+  PUB.notes = '';
+  PUB.issueName = '';
+  PUB.nameEdited = false;
+  PUB.lockArchiveName = true;
+  PUB.lockNotes = false;
+  PUB.month = STATE.boot.defaultMonth;
+  onMonthChanged(true);
+}
+
+// ---------- Submit ----------
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = () => reject(new Error('Could not read that file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function submitPublish(options) {
+  const opts = options || {};
+  if (!PUB.file) { toast('Choose a file first.', 'error'); return; }
+  if (!PUB.month) { toast('Pick the issue month.', 'error'); return; }
+
+  PUB.busy = opts.archiveOnly ? 'ARCHIVE' : 'LIVE';
+  render();
+  showBusy(opts.archiveOnly ? 'Uploading document…' : 'Publishing document…');
+
+  try {
+    const dataBase64 = await readFileAsBase64(PUB.file);
+
+    const payload = {
+      mode: STATE.mode,
+      issueDate: PUB.date,
+      issueName: PUB.issueName,
+      archiveName: PUB.archiveName,
+      fileName: PUB.file.name,
+      mimeType: PUB.file.type || 'application/pdf',
+      dataBase64: dataBase64,
+      notes: PUB.notes,
+      confirmReplace: opts.confirmReplace === true,
+      // "Upload & Publish As Live" is an explicit instruction, so it overrides
+      // the age check rather than prompting about it.
+      forceLive: opts.goLive === true || opts.forceLive === true,
+      archiveOnly: opts.archiveOnly === true
+    };
+
+    const res = await callServer('publishDocument', payload);
+    const data = res.data;
+
+    if (data && data.needsConfirmation) {
+      PUB.busy = false;
+      hideBusy();
+      render();
+      const clashIsLive = existingIsLive();
+      showModal({
+        title: clashIsLive ? 'Replace The Live Document?' : 'Replace The Existing Document?',
+        body: '<p>The newsletter for <strong>' + formatDisplayDate(PUB.date) +
+          '</strong> already has a published document' + (clashIsLive ? ', and it is currently live' : '') + '.</p>' +
+          (opts.archiveOnly && clashIsLive
+            ? '<div class="alert alert-warn mt-3">This files the new upload instead, but does <strong>not</strong> ' +
+              'make anything live. The newsletter link will show nothing live until you activate a document ' +
+              'from the Archive tab.</div>'
+            : '<p class="mt-3">Publishing this one marks the previous version as superseded. Nothing is deleted &mdash; ' +
+              'the old file stays in the archive and remains in Drive\'s version history.</p>'),
+        confirmLabel: opts.archiveOnly
+          ? (clashIsLive ? 'Replace &amp; Unset Live' : 'Upload It Anyway')
+          : (clashIsLive ? 'Replace Live Document' : 'Publish The Update'),
+        danger: opts.archiveOnly && clashIsLive,
+        onConfirm: () => submitPublish(Object.assign({}, opts, { confirmReplace: true }))
+      });
+      return;
+    }
+
+    PUB.busy = false;
+    hideBusy();
+
+    if (data && data.blockedByNewer) {
+      const blocker = data.blockedByNewer;
+      await refreshLiveStatus();
+      render();
+      showModal({
+        title: 'Archived, but not published live',
+        body: '<p>This document was filed for ' + formatDisplayDate(PUB.date) + ', but the live file currently holds ' +
+          'the newsletter for <strong>' + formatDisplayDate(blocker.issueDate) + '</strong>, which is later.</p>' +
+          '<p class="mt-3">Leave it archived, or push this older document live anyway?</p>',
+        cancelLabel: 'Leave it archived',
+        confirmLabel: 'Publish it live anyway',
+        onConfirm: () => submitPublish({ confirmReplace: true, forceLive: true })
+      });
+      toast(res.message || 'Archived.', 'warn');
+      return;
+    }
+
+    await refreshLiveStatus();
+    PUB.file = null;
+    PUB.notes = '';
+    invalidateDocumentLists();
+    await onMonthChanged(true);
+
+    toast(res.message || 'Published.', 'success');
+    if (data && data.converted) {
+      toast('Word document converted to PDF; the original is in the archive.', 'info');
+    }
+  } catch (e) {
+    PUB.busy = false;
+    hideBusy();
+    render();
+    toast(e.message, 'error');
+  }
+}
+</script>

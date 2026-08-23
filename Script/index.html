@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MLC Comms Newsletter Utility</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    const BOOT_USER = "<?= userEmail ?>";
+    const BOOT_LOGO = "<?= logoUrl ?>";
+    const BOOT_BUILD = "<?= build ?>";
+  </script>
+  <?!= include('CSS_Styles'); ?>
+</head>
+<body class="min-h-screen">
+
+  <!-- Loading gate -->
+  <div id="boot-overlay" class="fixed inset-0 z-50 flex flex-col items-center justify-center" style="background: var(--mlc-page);">
+    <img id="boot-logo" src="" alt="" class="h-20 w-20 mb-5 object-contain opacity-90">
+    <p class="font-display text-2xl mb-1" style="color: var(--mlc-navy);">MIDRAND LUTHERAN CHURCH</p>
+    <p class="text-xs tracking-[0.24em] uppercase font-bold mb-6" style="color: var(--mlc-gold-light);">Comms Newsletter Utility</p>
+    <div class="spinner w-9 h-9"></div>
+  </div>
+
+  <div id="app" class="hidden">
+
+    <!-- Header -->
+    <header class="mlc-header sticky top-0 z-40">
+      <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3 min-w-0">
+          <img id="header-logo" src="" alt="MLC" class="h-11 w-11 sm:h-12 sm:w-12 object-contain flex-shrink-0">
+          <div class="min-w-0">
+            <h1 class="font-display text-lg sm:text-xl leading-tight truncate" style="color: var(--mlc-navy);">MIDRAND LUTHERAN CHURCH</h1>
+            <p class="text-[11px] tracking-[0.14em] uppercase font-bold" style="color: var(--mlc-gold-light);">
+              Comms Newsletter Utility <span id="build-badge" class="ml-1.5" style="color: var(--mlc-muted);"></span>
+            </p>
+          </div>
+        </div>
+        <div class="text-right flex-shrink-0">
+          <p id="user-email" class="text-xs sm:text-sm truncate max-w-[150px] sm:max-w-none" style="color: var(--mlc-stone);"></p>
+          <div class="mt-1.5 flex gap-2 justify-end flex-wrap">
+            <button id="help-link" onclick="openHelpGuidePanel()" class="link-chip">Help</button>
+            <a id="drive-link" href="#" target="_blank" rel="noopener" class="link-chip">Open Drive Folder</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- No mode switch here — this project has a single document type, so
+           Publish/Archive are the sole, centred, primary navigation. Status
+           is not a tab either: it lives as a permanent sidebar beside the
+           content (see main below). -->
+      <div class="max-w-5xl mx-auto px-4 sm:px-6 pb-0 flex flex-col items-center gap-2">
+        <nav class="flex gap-6 pb-1">
+          <button class="tab-btn active" data-tab="PUBLISH" onclick="setTab('PUBLISH')">Publish</button>
+          <button class="tab-btn" data-tab="ARCHIVE" onclick="setTab('ARCHIVE')">Archive</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 sm:px-6 py-7">
+      <div class="content-grid">
+        <div id="main-content" class="content-main"></div>
+        <aside id="status-sidebar" class="content-sidebar"></aside>
+      </div>
+    </main>
+
+    <footer class="max-w-5xl mx-auto px-4 sm:px-6 py-8 text-center">
+      <p class="text-xs tracking-[0.14em] uppercase font-medium" style="color: var(--mlc-navy);">
+        Midrand Lutheran Church &middot; Communications
+      </p>
+    </footer>
+  </div>
+
+  <div id="modal-host"></div>
+  <div id="toast-host" class="fixed bottom-5 right-5 z-[300] flex flex-col gap-2 items-end"></div>
+
+  <!-- Global busy overlay: shown while a background operation (publish,
+       set live, trash, etc.) is in flight, so an admin can't act on a page
+       that's mid-change underneath them. -->
+  <div id="busy-overlay" class="busy-overlay hidden">
+    <div class="spinner w-10 h-10 mb-4"></div>
+    <p id="busy-overlay-text" class="font-display text-xl" style="color: var(--mlc-navy);">Working&hellip;</p>
+  </div>
+
+  <!-- Slide-over viewer panel: shared by the Help Guide and every document's
+       View action, so a newsletter opens the same way help does, without
+       leaving the page. -->
+  <div id="viewer-backdrop" class="help-backdrop hidden" onclick="if(event.target===this) closeViewerPanel()">
+    <div class="help-panel">
+      <div class="help-panel-header">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 mb-0.5">
+            <h3 id="viewer-title" class="font-display text-xl truncate" style="color: var(--mlc-gold-light);">Document</h3>
+            <span id="viewer-status-pill" class="pill hidden flex-shrink-0"></span>
+          </div>
+          <p id="viewer-subtitle" class="mono text-[11px] truncate hidden" style="color: var(--mlc-muted);"></p>
+          <p id="viewer-meta" class="text-[11px] truncate hidden" style="color: var(--mlc-muted);"></p>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <a id="viewer-newtab-link" href="#" target="_blank" rel="noopener" class="link-chip">Open In New Tab</a>
+          <button onclick="closeViewerPanel()" class="btn btn-ghost btn-sm">Close</button>
+        </div>
+      </div>
+      <p id="viewer-notes" class="hidden text-xs italic px-5 py-2" style="color: var(--mlc-blue-deep); background: var(--mlc-panel-2); border-bottom: 1px solid var(--mlc-border-soft);"></p>
+      <div id="viewer-panel-body" class="help-panel-body">
+        <div class="flex items-center justify-center h-full"><div class="spinner w-8 h-8"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <?!= include('JS_Main'); ?>
+  <?!= include('JS_Pages_Publish'); ?>
+  <?!= include('JS_Pages_Archive'); ?>
+  <?!= include('JS_Pages_Status'); ?>
+
+</body>
+</html>

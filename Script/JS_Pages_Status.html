@@ -1,0 +1,399 @@
+<script>
+/**
+ * Status sidebar: what is live right now, its embed code, that issue's
+ * publishing history, and a collapsible setup check.
+ *
+ * Renders beside Publish/Archive at all times — there is no mode switch
+ * above it to defer to, since this project has a single document type.
+ */
+
+const STAT = { diagnostics: null, running: false, showDiagnostics: false, showEmbed: false, showHistory: false };
+
+function renderStatusSidebar(host) {
+  const s = (STATE.liveStatus || {})[STATE.mode];
+  if (!s) { host.innerHTML = ''; return; }
+
+  host.innerHTML =
+    '<div class="flex flex-col gap-4">' +
+      liveCard(s) +
+      embedCard(s) +
+      historyCard(s) +
+      diagnosticsCard() +
+    '</div>';
+
+  if (STAT.showHistory && !(STATE.docHistory.loaded && STATE.docHistory.mode === STATE.mode)) {
+    loadDocumentHistory();
+  }
+}
+
+function liveCard(s) {
+  const rec = s.record;
+
+  return '<article class="mlc-panel p-5">' +
+    '<div class="flex items-center justify-between mb-3">' +
+      '<h3 class="font-display text-lg" style="color: var(--mlc-text);">' + escapeHtml(s.label) + '</h3>' +
+      '<span class="pill ' + (s.exists ? (s.placeholderActive ? 'pill-unassigned' : 'pill-live') : 'pill-superseded') + '">' +
+        (s.exists ? (s.placeholderActive ? 'Disabled' : 'Live') : 'Not Created Yet') + '</span>' +
+    '</div>' +
+
+    (!s.exists
+      ? '<p class="text-xs" style="color: var(--mlc-muted);">It will be created the first time you publish.</p>'
+      : s.placeholderActive
+        ? placeholderCard(s)
+        : liveCardBody(s, rec)) +
+  '</article>';
+}
+
+/**
+ * The live file is showing "Document To Be Published". This is not a real
+ * document — no issue name, no month, no version history of its own — so
+ * the card offers exactly one thing: put back whatever was live before.
+ */
+function placeholderCard(s) {
+  const d = s.disabledRecord;
+  return '<div class="alert alert-warn mb-3 text-[13px]">' +
+      '<strong>The live ' + escapeHtml(s.label.toLowerCase()) + ' is disabled.</strong> The website currently shows ' +
+      'a &ldquo;document to be published&rdquo; page. This is not itself a document &mdash; it cannot be dated or ' +
+      'archived, only replaced.' +
+    '</div>' +
+    (d
+      ? '<div class="mlc-panel-inset p-3 mb-3">' +
+          '<p class="text-[10px] tracking-[0.1em] uppercase mb-1" style="color: var(--mlc-muted);">Was Live Before Disabling</p>' +
+          '<p class="font-serif-body text-sm" style="color: var(--mlc-gold-light);">' +
+            escapeHtml(d.issueName || d.archiveFileName) + '</p>' +
+          (d.issueDate ? '<p class="text-xs mt-0.5" style="color: var(--mlc-stone);">' +
+            formatDisplayDate(d.issueDate) + '</p>' : '') +
+        '</div>' +
+        '<button class="btn btn-primary btn-sm w-full" onclick="confirmReenableLive(\'' + s.mode + '\')">' +
+          'Re-enable This Document</button>'
+      : '<p class="text-xs mb-3" style="color: var(--mlc-muted);">The document that was live before could not be ' +
+        'found. Choose one from the Archive and use <strong>Set as Live</strong> instead.</p>') +
+    '<div class="flex gap-2 flex-wrap mt-3">' + linkChips(s.links, null, s.fileName, { fileName: s.fileName }) + '</div>';
+}
+
+function liveCardBody(s, rec) {
+  return '<p class="font-serif-body text-base mb-1" style="color: var(--mlc-gold-light);">' +
+      escapeHtml(rec && rec.issueName ? rec.issueName : s.fileName) + '</p>' +
+    (rec && rec.issueDate
+      ? '<p class="text-xs mb-2" style="color: var(--mlc-stone);">Issue of ' + formatDisplayDate(rec.issueDate) + '</p>'
+      : '<div class="alert alert-warn mb-3 text-[13px]">' +
+          'The document that is currently live has not been dated. ' +
+          '<button class="underline font-bold" onclick="openDateCurrentLive(&quot;' + s.mode + '&quot;)">Date it now</button>' +
+          '<span class="block mt-1.5" style="color: var(--mlc-muted);">' +
+            'If you already dated a copy in the Archive, that does not change what is live &mdash; ' +
+            'use <strong>Set as Live</strong> on that record instead.' +
+          '</span>' +
+        '</div>') +
+    '<p class="text-[11px] mb-3" style="color: var(--mlc-muted);">Updated ' + escapeHtml(s.lastUpdated) +
+      ' &middot; ' + escapeHtml(s.size) + '</p>' +
+    (rec && rec.notes
+      ? '<p class="text-xs italic mb-3" style="color: var(--mlc-blue-deep);">&ldquo;' + escapeHtml(rec.notes) + '&rdquo;</p>'
+      : '') +
+    '<div class="flex gap-2 flex-wrap mb-3">' +
+      linkChips(s.links, null, (rec && rec.issueName) || s.fileName, {
+        fileName: s.fileName,
+        status: 'LIVE',
+        issueDate: rec ? rec.issueDate : '',
+        updated: s.lastUpdated,
+        notes: rec ? rec.notes : '',
+        size: s.size
+      }) +
+    '</div>' +
+    '<button class="btn btn-danger btn-sm w-full" onclick="confirmDisableLive(\'' + s.mode + '\')">Disable Live</button>';
+}
+
+function embedCard(s) {
+  if (!s.exists) return '';
+
+  return '<article class="mlc-panel p-5">' +
+    '<button class="flex items-center justify-between w-full text-left" onclick="toggleEmbed()">' +
+      '<h3 class="font-display text-lg" style="color: var(--mlc-text);">Embed Code</h3>' +
+      '<span class="text-xs font-bold" style="color: var(--mlc-blue-deep);">' + (STAT.showEmbed ? 'Hide' : 'Show') + '</span>' +
+    '</button>' +
+    (STAT.showEmbed
+      ? '<div class="mt-4">' +
+          copyRow('Direct Link', s.links.viewUrl) +
+          copyRow('Embed Code', '<iframe src="' + s.links.previewUrl + '" width="100%" height="800" allow="autoplay"></iframe>') +
+        '</div>'
+      : '<p class="text-xs mt-1" style="color: var(--mlc-muted);">The address to paste into the website. It never changes.</p>') +
+  '</article>';
+}
+
+function copyRow(label, value) {
+  const id = 'copy-' + Math.random().toString(36).substring(2, 9);
+  return '<div class="mlc-panel-inset p-3 mb-2">' +
+    '<div class="flex items-center justify-between gap-3 mb-1.5">' +
+      '<span class="text-[10px] tracking-[0.14em] uppercase" style="color: var(--mlc-muted);">' + label + '</span>' +
+      '<button class="link-chip" onclick="copyValue(\'' + id + '\', this)">Copy</button>' +
+    '</div>' +
+    '<p id="' + id + '" class="mono text-[11px] break-all" style="color: var(--mlc-blue-deep);">' +
+      escapeHtml(value) + '</p>' +
+  '</div>';
+}
+
+function copyValue(id, button) {
+  const text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const original = button.textContent;
+    button.textContent = 'Copied';
+    setTimeout(() => { button.textContent = original; }, 1600);
+  }).catch(() => toast('Could not copy — select the text manually.', 'error'));
+}
+
+function toggleEmbed() {
+  STAT.showEmbed = !STAT.showEmbed;
+  render();
+}
+
+/**
+ * Every draft, correction and republish filed for the issue currently live —
+ * "versions" in the sense an admin means it, as opposed to Drive's raw
+ * revision list on the live file, which mixes together whatever unrelated
+ * issues happened to pass through that one file over time.
+ */
+function historyCard(s) {
+  if (!s.exists) return '';
+
+  return '<article class="mlc-panel p-5">' +
+    '<button class="flex items-center justify-between w-full text-left" onclick="toggleHistory()">' +
+      '<h3 class="font-display text-lg" style="color: var(--mlc-text);">Document History</h3>' +
+      '<span class="text-xs font-bold" style="color: var(--mlc-blue-deep);">' + (STAT.showHistory ? 'Hide' : 'Show') + '</span>' +
+    '</button>' +
+    (STAT.showHistory
+      ? '<div class="mt-4">' + historyBody() + '</div>'
+      : '<p class="text-xs mt-1" style="color: var(--mlc-muted);">Every draft and correction filed for this issue.</p>') +
+  '</article>';
+}
+
+function historyBody() {
+  const h = STATE.docHistory;
+  if (!h.loaded || h.mode !== STATE.mode) {
+    return '<div class="flex justify-center py-4"><div class="spinner w-6 h-6"></div></div>';
+  }
+  if (!h.issueDate) {
+    return '<p class="text-xs" style="color: var(--mlc-muted);">Nothing dated yet for this document type.</p>';
+  }
+  if (!h.records.length) {
+    return '<p class="text-xs" style="color: var(--mlc-muted);">Nothing on record for ' +
+      formatDisplayDate(h.issueDate) + '.</p>';
+  }
+
+  return '<p class="text-[11px] mb-3" style="color: var(--mlc-muted);">For the issue of ' +
+      '<strong style="color: var(--mlc-stone);">' + formatDisplayDate(h.issueDate) + '</strong></p>' +
+    '<div class="flex flex-col gap-2">' + h.records.map(historyRow).join('') + '</div>';
+}
+
+function historyRow(r) {
+  return '<div class="mlc-panel-inset p-3">' +
+    '<div class="flex items-center gap-2 mb-1 flex-wrap">' +
+      statusPill(r.status) +
+      '<span class="text-[11px]" style="color: var(--mlc-muted);">' + escapeHtml(r.publishedAt) + '</span>' +
+    '</div>' +
+    '<p class="text-[11px] mono break-all mb-2" style="color: #63605A;">' + escapeHtml(r.archiveFileName) + '</p>' +
+    (r.notes
+      ? '<p class="text-xs italic mb-2" style="color: var(--mlc-blue-deep);">&ldquo;' + escapeHtml(r.notes) + '&rdquo;</p>'
+      : '') +
+    '<div class="flex gap-1.5 flex-wrap">' +
+      linkChips(r.links, r.originalLinks, r.issueName || r.archiveFileName, {
+        fileName: r.archiveFileName, status: r.status, issueDate: r.issueDate, updated: r.publishedAt, notes: r.notes
+      }) +
+      (r.status === 'LIVE'
+        ? ''
+        : '<button class="btn btn-danger btn-sm icon-btn" onclick="confirmTrashRecord(\'' + r.recordId + '\')" ' +
+          'title="Delete File" aria-label="Delete File">' + ICONS.trash + '</button>') +
+    '</div>' +
+  '</div>';
+}
+
+function toggleHistory() {
+  STAT.showHistory = !STAT.showHistory;
+  render();
+}
+
+async function loadDocumentHistory() {
+  try {
+    const res = await callServer('getDocumentHistory', STATE.mode);
+    STATE.docHistory = Object.assign({ mode: STATE.mode, loaded: true }, res.data);
+  } catch (e) {
+    toast(e.message, 'error');
+    STATE.docHistory = { mode: STATE.mode, loaded: true, issueDate: '', issueName: '', records: [] };
+  }
+  render();
+}
+
+function diagnosticsCard() {
+  return '<article class="mlc-panel p-5">' +
+    '<button class="flex items-center justify-between w-full text-left" onclick="toggleDiagnostics()">' +
+      '<h3 class="font-display text-lg" style="color: var(--mlc-text);">Setup Check</h3>' +
+      '<span class="text-xs font-bold" style="color: var(--mlc-blue-deep);">' + (STAT.showDiagnostics ? 'Hide' : 'Show') + '</span>' +
+    '</button>' +
+    (STAT.showDiagnostics
+      ? '<div class="mt-4">' +
+          '<button class="btn btn-secondary btn-sm w-full mb-3" ' + (STAT.running ? 'disabled' : '') + ' onclick="runChecks()">' +
+            (STAT.running ? 'Checking' : 'Run Check') +
+          '</button>' +
+          (STAT.diagnostics
+            ? '<div class="flex flex-col gap-2">' + STAT.diagnostics.map(c =>
+                '<div class="mlc-panel-inset px-3 py-2.5 flex items-start justify-between gap-2">' +
+                  '<div><p class="text-xs font-bold" style="color: var(--mlc-text);">' + escapeHtml(c.name) + '</p>' +
+                  '<p class="text-[11px] mt-0.5" style="color: var(--mlc-muted);">' + escapeHtml(c.detail) + '</p></div>' +
+                  '<span class="pill ' + (c.ok ? 'pill-live' : 'pill-unassigned') + '">' + (c.ok ? 'OK' : 'Check') + '</span>' +
+                '</div>').join('') + '</div>'
+            : '<p class="text-xs" style="color: var(--mlc-muted);">Confirms the Drive folder, the live file, the ' +
+              'index sheet and the Drive API are all reachable.</p>') +
+        '</div>'
+      : '') +
+  '</article>';
+}
+
+function toggleDiagnostics() {
+  STAT.showDiagnostics = !STAT.showDiagnostics;
+  render();
+}
+
+/**
+ * Date the document already sitting in the live file — the day-one case,
+ * where the newsletter was published before this utility existed and
+ * nothing records which issue it belongs to.
+ */
+function openDateCurrentLive(modeKey) {
+  showModal({
+    title: 'Set The Issue Month',
+    body:
+      '<p class="mb-4">Tell the system which month the document currently live belongs to. ' +
+      'A permanent copy is filed in the archive and the live file itself is left exactly as it is, ' +
+      'so nothing changes for anyone reading it.</p>' +
+      '<label class="field-label" for="dl-month">Issue Month</label>' +
+      '<input type="month" id="dl-month" class="field mb-4" value="' + STATE.boot.defaultMonth + '">' +
+      '<label class="field-label" for="dl-name">Issue Name <span class="normal-case tracking-normal">(optional)</span></label>' +
+      '<input type="text" id="dl-name" class="field mb-4" placeholder="e.g. Second Quarter Edition">',
+    confirmLabel: 'Set Issue Month',
+    onConfirm: () => submitDateCurrentLive(modeKey)
+  });
+
+  const confirmBtn = document.getElementById('modal-confirm');
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', () => {
+      const monthEl = document.getElementById('dl-month');
+      const nameEl = document.getElementById('dl-name');
+      window.__dateLivePayload = {
+        mode: modeKey,
+        issueDate: monthEl.value ? monthEl.value + '-01' : '',
+        issueName: nameEl ? nameEl.value : ''
+      };
+    }, true);
+  }
+}
+
+async function submitDateCurrentLive(modeKey, force) {
+  const payload = Object.assign({}, window.__dateLivePayload || {}, force ? { confirmReplace: true } : {});
+  if (!payload.issueDate) { toast('Pick an issue month first.', 'error'); return; }
+
+  showBusy('Saving…');
+  try {
+    const res = await callServer('dateCurrentLive', payload);
+
+    if (res.data && res.data.needsConfirmation) {
+      showModal({
+        title: 'Already Recorded For That Issue',
+        body: '<p>Another document is already recorded for that issue month. Continuing marks it superseded; ' +
+          'nothing is deleted.</p>',
+        confirmLabel: 'Continue',
+        onConfirm: () => submitDateCurrentLive(modeKey, true)
+      });
+      return;
+    }
+
+    await refreshLiveStatus();
+    invalidateDocumentLists();
+    toast(res.message || 'Dated.', 'success');
+    render();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    hideBusy();
+  }
+}
+
+/**
+ * Take a document down without breaking the embed: the live file keeps its ID
+ * and receives the fixed placeholder document instead of the old newsletter.
+ */
+function confirmDisableLive(modeKey) {
+  const s = (STATE.liveStatus || {})[modeKey];
+  if (!s) return;
+
+  showModal({
+    title: 'Disable the Live ' + escapeHtml(s.label) + '?',
+    body:
+      '<p>The live file keeps its link and stays published, but its contents are replaced with a ' +
+      'placeholder page reading <strong>&ldquo;Document to be published&rdquo;</strong> on the church\'s pastel red.</p>' +
+      '<p class="mt-3">Use this when the current document should no longer be read &mdash; the website embed ' +
+      'then shows the placeholder rather than a stale ' + escapeHtml(s.label.toLowerCase()) + '.</p>' +
+      '<div class="alert alert-info mt-4">Nothing is lost. The document itself stays exactly as it is, and this ' +
+      'panel will offer to put it straight back with one click, under <strong>Re-enable This Document</strong>.</div>',
+    confirmLabel: 'Disable Live',
+    danger: true,
+    onConfirm: async () => {
+      showBusy('Disabling live document…');
+      try {
+        const res = await callServer('disableLive', modeKey);
+        await refreshLiveStatus();
+        invalidateDocumentLists();
+        toast(res.message || 'Placeholder is now live.', 'success');
+        render();
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        hideBusy();
+      }
+    }
+  });
+}
+
+/** Undo Disable Live in one step: restores whatever was live immediately before. */
+function confirmReenableLive(modeKey) {
+  const s = (STATE.liveStatus || {})[modeKey];
+  const d = s && s.disabledRecord;
+  if (!d) return;
+
+  showModal({
+    title: 'Re-enable This Document?',
+    body: '<p>The live <strong>newsletter</strong> will go back to:</p>' +
+      '<div class="mlc-panel-inset p-3 mt-3">' +
+        '<p class="font-serif-body text-sm" style="color: var(--mlc-gold-light);">' +
+          escapeHtml(d.issueName || d.archiveFileName) + '</p>' +
+        (d.issueDate ? '<p class="text-xs mt-0.5" style="color: var(--mlc-muted);">' +
+          formatDisplayDate(d.issueDate) + '</p>' : '') +
+      '</div>',
+    confirmLabel: 'Re-enable',
+    onConfirm: async () => {
+      showBusy('Re-enabling…');
+      try {
+        const res = await callServer('reenableLive', modeKey);
+        await refreshLiveStatus();
+        invalidateDocumentLists();
+        toast(res.message || 'Re-enabled.', 'success');
+        render();
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        hideBusy();
+      }
+    }
+  });
+}
+
+async function runChecks() {
+  STAT.running = true;
+  render();
+  try {
+    const res = await callServer('runDiagnostics');
+    STAT.diagnostics = res.data.checks;
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+  STAT.running = false;
+  render();
+}
+</script>

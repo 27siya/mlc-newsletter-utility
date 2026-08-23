@@ -1,0 +1,434 @@
+<script>
+/**
+ * Shell: state, routing, server bridge, toasts and modals.
+ */
+
+// A single document type, so STATE.mode is fixed at 'NEWSLETTER' for the
+// life of the page — there is no mode switch, but keeping the field (rather
+// than deleting every MODES[STATE.mode] lookup) means the publish/archive/
+// status modules below stay line-for-line comparable with the sibling
+// MLC Admin Documents Utility, which does support multiple modes.
+const STATE = {
+  mode: 'NEWSLETTER',
+  tab: 'PUBLISH',
+  boot: null,
+  liveStatus: null,
+  archive: { records: [], unassigned: [], loaded: false },
+  // The sidebar's "Document History" — every draft/correction filed for
+  // whichever issue is currently live.
+  docHistory: { mode: null, issueDate: '', issueName: '', records: [], loaded: false }
+};
+
+/** Any change to a document (publish, delete, set live, etc.) invalidates
+ * both lists, since either might now be stale — cheap, and simpler than
+ * tracking exactly which list a given action could have affected. */
+function invalidateDocumentLists() {
+  STATE.archive.loaded = false;
+  STATE.docHistory.loaded = false;
+}
+
+// ---------- Server bridge ----------
+
+/**
+ * Promise wrapper around google.script.run, with a single place to surface
+ * the standard {success, error} envelope the server returns.
+ */
+function callServer(fnName, ...args) {
+  return new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res && res.success === false) {
+          reject(new Error((res.error && res.error.message) || 'Something went wrong.'));
+          return;
+        }
+        resolve(res && res.data !== undefined ? res : { data: res });
+      })
+      .withFailureHandler(err => reject(new Error(err && err.message ? err.message : String(err))))
+      [fnName](...args);
+  });
+}
+
+// ---------- Boot ----------
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (BOOT_LOGO) {
+    document.getElementById('boot-logo').src = BOOT_LOGO;
+    document.getElementById('header-logo').src = BOOT_LOGO;
+  }
+  boot();
+});
+
+async function boot() {
+  try {
+    const res = await callServer('getBootstrap');
+    STATE.boot = res.data;
+    STATE.liveStatus = res.data.liveStatus;
+
+    document.getElementById('user-email').textContent = res.data.user.email;
+    document.getElementById('build-badge').textContent = 'v' + res.data.build;
+    document.getElementById('drive-link').href = res.data.driveFolderUrl;
+    if (res.data.logoUrl) {
+      document.getElementById('header-logo').src = res.data.logoUrl;
+    }
+
+    document.getElementById('boot-overlay').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    render();
+  } catch (e) {
+    document.getElementById('boot-overlay').innerHTML =
+      '<div class="mlc-panel p-7 max-w-md text-center">' +
+      '<p class="font-display text-xl mb-3" style="color: var(--mlc-red);">Could not start</p>' +
+      '<p class="text-sm mb-4" style="color: var(--mlc-stone);">' + escapeHtml(e.message) + '</p>' +
+      '<button class="btn btn-ghost" onclick="location.reload()">Try again</button></div>';
+  }
+}
+
+// ---------- Routing ----------
+
+function setTab(tab) {
+  STATE.tab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  render();
+}
+
+function render() {
+  const host = document.getElementById('main-content');
+  host.classList.remove('fade-in');
+  void host.offsetWidth;
+  host.classList.add('fade-in');
+
+  if (STATE.tab === 'ARCHIVE') renderArchive(host);
+  else renderPublish(host);
+
+  renderStatusSidebar(document.getElementById('status-sidebar'));
+}
+
+/**
+ * Slide-over viewer panel — shared by the Help Guide and every document's
+ * View action. Opening the newsletter to look at it should feel the same as
+ * opening the help guide: without leaving the page.
+ *
+ * @param {string} embedUrl   a URL Google will actually render in an <iframe>
+ *   (Drive's /preview path, or a Doc's /preview path — the plain /view paths
+ *   refuse to frame)
+ * @param {string} newTabUrl  the equivalent, full-featured URL for "Open In New Tab"
+ * @param {string} title      the heading — the issue name where there is one
+ * @param {string} [fileName] the actual Drive filename, shown as a subtitle so
+ *   it's clear which physical file this is, distinct from its issue name
+ * @param {Object} [status]   {label, pillClass} — e.g. {label:'Live', pillClass:'pill-live'} —
+ *   so it's obvious whether this is the live document, an archived one, or undated
+ * @param {Object} [meta]     {issueDate, updated, size, notes} — omitted entirely for the
+ *   Help Guide, which is a Doc with no issue date, file size or notes to speak of
+ */
+function openViewerPanel(embedUrl, newTabUrl, title, fileName, status, meta) {
+  const backdrop = document.getElementById('viewer-backdrop');
+  const body = document.getElementById('viewer-panel-body');
+  const pill = document.getElementById('viewer-status-pill');
+  const subtitle = document.getElementById('viewer-subtitle');
+  const metaLine = document.getElementById('viewer-meta');
+  const notesLine = document.getElementById('viewer-notes');
+
+  document.getElementById('viewer-title').textContent = title || 'Document';
+  document.getElementById('viewer-newtab-link').href = newTabUrl || embedUrl;
+
+  if (status && status.label) {
+    pill.textContent = status.label;
+    pill.className = 'pill flex-shrink-0 ' + (status.pillClass || 'pill-archived');
+  } else {
+    pill.classList.add('hidden');
+  }
+
+  // Only worth a separate line when it says something the title doesn't —
+  // i.e. the file is not simply named after its own issue.
+  if (fileName && fileName !== title) {
+    subtitle.textContent = fileName;
+    subtitle.classList.remove('hidden');
+  } else {
+    subtitle.classList.add('hidden');
+  }
+
+  const metaParts = [];
+  if (meta && meta.issueDate) metaParts.push('Issue of ' + formatDisplayDate(meta.issueDate));
+  if (meta && meta.updated) metaParts.push('Updated ' + meta.updated);
+  if (meta && meta.size) metaParts.push(meta.size);
+  if (metaParts.length) {
+    metaLine.textContent = metaParts.join(' · ');
+    metaLine.classList.remove('hidden');
+  } else {
+    metaLine.classList.add('hidden');
+  }
+
+  if (meta && meta.notes) {
+    notesLine.textContent = '“' + meta.notes + '”';
+    notesLine.classList.remove('hidden');
+  } else {
+    notesLine.classList.add('hidden');
+  }
+
+  backdrop.classList.remove('hidden');
+  body.innerHTML = '<iframe src="' + embedUrl + '" title="' + escapeHtml(title || 'Document') + '"></iframe>';
+}
+
+function closeViewerPanel() {
+  document.getElementById('viewer-backdrop').classList.add('hidden');
+  // Stop the iframe's content (e.g. a PDF) from continuing to load or play
+  // in the background once the panel is closed.
+  document.getElementById('viewer-panel-body').innerHTML = '';
+}
+
+/**
+ * Open a Drive document (live newsletter, or an archived copy) in the viewer.
+ * @param {string} statusLabel one of 'LIVE' | 'ARCHIVED' | 'SUPERSEDED' | 'UNDATED'
+ * @param {string} issueDate   yyyy-MM-dd (always the 1st of the month), or '' when there isn't one
+ * @param {string} updated     already-formatted timestamp
+ * @param {string} size        already-formatted file size
+ * @param {string} notes       the admin's note on this document, or ''
+ */
+function viewDocument(previewUrl, viewUrl, title, fileName, statusLabel, issueDate, updated, size, notes) {
+  const statusMap = {
+    LIVE: { label: 'Live', pillClass: 'pill-live' },
+    ARCHIVED: { label: 'Archived', pillClass: 'pill-archived' },
+    SUPERSEDED: { label: 'Superseded', pillClass: 'pill-superseded' },
+    UNDATED: { label: 'Undated File', pillClass: 'pill-unassigned' }
+  };
+  openViewerPanel(previewUrl, viewUrl, title, fileName, statusMap[statusLabel],
+    { issueDate: issueDate, updated: updated, size: size, notes: notes });
+}
+
+/**
+ * Open the Help Guide in the same viewer, fetching/refreshing the Doc first.
+ * It's a Doc, not a dated Drive file, so the status pill / subtitle / meta
+ * line that a document view shows are explicitly cleared here — otherwise
+ * whatever a previous document view left behind would linger.
+ */
+async function openHelpGuidePanel() {
+  const backdrop = document.getElementById('viewer-backdrop');
+  const body = document.getElementById('viewer-panel-body');
+  document.getElementById('viewer-title').textContent = 'Help Guide';
+  document.getElementById('viewer-status-pill').classList.add('hidden');
+  document.getElementById('viewer-subtitle').classList.add('hidden');
+  document.getElementById('viewer-meta').classList.add('hidden');
+  document.getElementById('viewer-notes').classList.add('hidden');
+  backdrop.classList.remove('hidden');
+  body.innerHTML = '<div class="flex items-center justify-center h-full"><div class="spinner w-8 h-8"></div></div>';
+
+  try {
+    const res = await callServer('getHelpGuideUrl');
+    document.getElementById('viewer-newtab-link').href = res.data.url;
+    body.innerHTML = '<iframe src="' + res.data.embedUrl + '" title="Help Guide"></iframe>';
+  } catch (e) {
+    body.innerHTML = '<div class="p-6"><p class="alert alert-error">' + escapeHtml(e.message) + '</p></div>';
+  }
+}
+
+/** Pull fresh live-file status after any change. */
+async function refreshLiveStatus() {
+  try {
+    const res = await callServer('getLiveStatus');
+    STATE.liveStatus = res.data;
+  } catch (e) {
+    console.warn('Could not refresh status', e);
+  }
+}
+
+// ---------- Helpers ----------
+
+function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  return String(text).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/** Small inline icons for icon-only buttons — inherit colour via currentColor. */
+const ICONS = {
+  download: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M12 4v11"></path><path d="M7.5 11 12 15.5 16.5 11"></path>' +
+    '<path d="M5 19h14"></path></svg>',
+  trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M5 7h14"></path><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>' +
+    '<path d="M7 7l1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12"></path>' +
+    '<path d="M10 11v6"></path><path d="M14 11v6"></path></svg>'
+};
+
+/** "August 2026" — no day, since a newsletter issue is a month, not a date. */
+function formatDisplayDate(iso) {
+  if (!iso) return '';
+  const parts = String(iso).split('-');
+  if (parts.length !== 3) return iso;
+  const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  return d.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+}
+
+function humanSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(0) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function statusPill(status) {
+  const map = {
+    LIVE: ['pill-live', 'Live'],
+    ARCHIVED: ['pill-archived', 'Archived'],
+    SUPERSEDED: ['pill-superseded', 'Superseded']
+  };
+  const [cls, label] = map[status] || ['pill-archived', status || 'Archived'];
+  return '<span class="pill ' + cls + '">' + label + '</span>';
+}
+
+/** ' is the only character that can break the single-quoted JS literals these
+ * onclick attributes build — issue names and filenames are the values that
+ * actually contain it. */
+function jsAttrSafe_(text) {
+  return escapeHtml(text || '').replace(/'/g, "\\'");
+}
+
+/**
+ * @param {Object} links           from fileLinks_(): {viewUrl, previewUrl, downloadUrl}
+ * @param {Object} [originalLinks] the Word source, when a DOCX was converted
+ * @param {string} [title]         shown in the slide-over panel's header when View is clicked
+ * @param {Object} [meta]          {fileName, status, issueDate, updated, size} — all optional;
+ *   status is one of 'LIVE' | 'ARCHIVED' | 'SUPERSEDED' | 'UNDATED'
+ */
+function linkChips(links, originalLinks, title, meta) {
+  if (!links) return '';
+  const m = meta || {};
+  const safeTitle = jsAttrSafe_(title);
+  const safeFileName = jsAttrSafe_(m.fileName);
+  // Notes are free text and may contain newlines — flatten before it goes
+  // anywhere near a single-quoted JS string literal in an onclick attribute.
+  const safeNotes = jsAttrSafe_(String(m.notes || '').replace(/[\r\n]+/g, ' '));
+
+  let html =
+    '<button type="button" class="link-chip" onclick="viewDocument(\'' + links.previewUrl + '\', \'' +
+      links.viewUrl + '\', \'' + safeTitle + '\', \'' + safeFileName + '\', \'' + (m.status || '') + '\', \'' +
+      (m.issueDate || '') + '\', \'' + jsAttrSafe_(m.updated) + '\', \'' + jsAttrSafe_(m.size) + '\', \'' +
+      safeNotes + '\')">View</button>' +
+    '<a href="' + links.viewUrl + '" target="_blank" rel="noopener" class="link-chip link-chip-drive">Open In Drive</a>' +
+    '<a href="' + links.downloadUrl + '" target="_blank" rel="noopener" class="link-chip link-chip-download icon-btn" ' +
+      'title="Download" aria-label="Download">' + ICONS.download + '</a>';
+
+  if (originalLinks) {
+    html += '<a href="' + originalLinks.viewUrl + '" target="_blank" rel="noopener" class="link-chip">Word Source</a>';
+  }
+  return html;
+}
+
+// ---------- Global busy overlay ----------
+
+// A counter, not a boolean: some flows call showBusy inside a callback that
+// runs while an outer showBusy/hideBusy pair is still in flight (e.g. the
+// "already exists — replace it?" confirm chains straight into another
+// operation). Counting means the overlay only actually hides once every
+// caller that asked for it is done.
+let _busyDepth = 0;
+
+function showBusy(text) {
+  _busyDepth++;
+  document.getElementById('busy-overlay-text').textContent = text || 'Working…';
+  document.getElementById('busy-overlay').classList.remove('hidden');
+}
+
+function hideBusy() {
+  _busyDepth = Math.max(0, _busyDepth - 1);
+  if (_busyDepth === 0) document.getElementById('busy-overlay').classList.add('hidden');
+}
+
+// ---------- Toasts ----------
+
+function toast(message, type = 'info') {
+  const colours = {
+    success: 'var(--mlc-green)',
+    error: 'var(--mlc-red)',
+    warn: 'var(--mlc-gold)',
+    info: 'var(--mlc-blue)'
+  };
+  const el = document.createElement('div');
+  el.className = 'mlc-panel px-4 py-3 text-sm max-w-xs fade-in shadow-2xl';
+  el.style.borderLeft = '3px solid ' + (colours[type] || colours.info);
+  el.textContent = message;
+  document.getElementById('toast-host').appendChild(el);
+  setTimeout(() => {
+    el.style.transition = 'opacity 0.3s';
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 320);
+  }, 4600);
+}
+
+// ---------- Modal ----------
+
+function closeModal() {
+  document.getElementById('modal-host').innerHTML = '';
+}
+
+/**
+ * @param {Object} opts {title, body, confirmLabel, cancelLabel, danger, onConfirm}
+ */
+function showModal(opts) {
+  const host = document.getElementById('modal-host');
+  host.innerHTML =
+    '<div class="modal-backdrop" onclick="if(event.target===this) closeModal()">' +
+      '<div class="modal-card p-6">' +
+        '<h3 class="font-display text-xl mb-3" style="color: var(--mlc-gold-light);">' + escapeHtml(opts.title) + '</h3>' +
+        '<div class="text-sm leading-relaxed mb-6" style="color: var(--mlc-stone);">' + (opts.body || '') + '</div>' +
+        '<div class="flex gap-3 justify-end">' +
+          '<button class="btn btn-ghost" onclick="closeModal()">' + escapeHtml(opts.cancelLabel || 'Cancel') + '</button>' +
+          (opts.confirmLabel
+            ? '<button id="modal-confirm" class="btn ' + (opts.danger ? 'btn-danger' : 'btn-primary') + '">' +
+              escapeHtml(opts.confirmLabel) + '</button>'
+            : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  if (opts.confirmLabel) {
+    document.getElementById('modal-confirm').addEventListener('click', () => {
+      closeModal();
+      if (typeof opts.onConfirm === 'function') opts.onConfirm();
+    });
+  }
+}
+
+/**
+ * A destructive confirmation that cannot be clicked through by reflex: the
+ * admin must type the word before the button will enable.
+ * @param {Object} opts {title, body, word, confirmLabel, onConfirm}
+ */
+function showTypeToConfirmModal(opts) {
+  const word = opts.word || 'REMOVE';
+  const host = document.getElementById('modal-host');
+
+  host.innerHTML =
+    '<div class="modal-backdrop" onclick="if(event.target===this) closeModal()">' +
+      '<div class="modal-card p-6" style="border-top-color: var(--mlc-red);">' +
+        '<h3 class="font-display text-xl mb-3" style="color: #F0A9AB;">' + escapeHtml(opts.title) + '</h3>' +
+        '<div class="text-sm leading-relaxed mb-5" style="color: var(--mlc-stone);">' + (opts.body || '') + '</div>' +
+        '<label class="field-label" for="danger-word">Type <span class="mono" style="color: var(--mlc-red);">' +
+          escapeHtml(word) + '</span> to confirm</label>' +
+        '<input type="text" id="danger-word" class="field mb-6" autocomplete="off" spellcheck="false" ' +
+          'placeholder="' + escapeHtml(word) + '">' +
+        '<div class="flex gap-3 justify-end">' +
+          '<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>' +
+          '<button id="danger-confirm" class="btn btn-danger" disabled>' +
+            escapeHtml(opts.confirmLabel || 'Remove') + '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  const input = document.getElementById('danger-word');
+  const button = document.getElementById('danger-confirm');
+
+  input.addEventListener('input', () => {
+    button.disabled = input.value.trim().toUpperCase() !== word.toUpperCase();
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !button.disabled) button.click();
+  });
+  button.addEventListener('click', () => {
+    closeModal();
+    if (typeof opts.onConfirm === 'function') opts.onConfirm();
+  });
+  input.focus();
+}
+</script>

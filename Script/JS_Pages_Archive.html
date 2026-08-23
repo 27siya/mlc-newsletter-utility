@@ -1,0 +1,529 @@
+<script>
+/**
+ * Archive tab.
+ *
+ * Two lists: documents the utility knows the issue period of, and files
+ * sitting in the archive folder that were never dated. Any record can be
+ * made the active (live) document, re-dated, or renamed — the date binding
+ * is editable after the fact, because admins do not always file things the
+ * same way.
+ */
+
+const ARC = {
+  query: '',
+  fromDate: '',
+  toDate: '',
+  includeSuperseded: false,
+  loading: false
+};
+
+function renderArchive(host) {
+  if (!STATE.archive.loaded && !ARC.loading) {
+    loadArchive();
+  }
+
+  const records = STATE.archive.records;
+  const unassigned = STATE.archive.unassigned;
+
+  host.innerHTML =
+    '<section class="mlc-panel p-5 sm:p-6 mb-5">' +
+      '<h2 class="font-display text-2xl mb-5" style="color: var(--mlc-gold-light);">Newsletter Archive</h2>' +
+
+      '<div class="filter-grid mb-4">' +
+        '<div>' +
+          '<label class="field-label" for="arc-q">Search</label>' +
+          '<div class="relative">' +
+            '<input type="text" id="arc-q" class="field pr-8" placeholder="Issue name, filename, notes" ' +
+              'value="' + escapeHtml(ARC.query) + '" oninput="onArchiveQueryInput(this.value)">' +
+            (ARC.query
+              ? '<button type="button" class="field-clear-btn" title="Clear search" onclick="clearArchiveQuery()">&times;</button>'
+              : '') +
+          '</div>' +
+        '</div>' +
+        '<div>' +
+          '<label class="field-label" for="arc-from">From</label>' +
+          '<input type="month" id="arc-from" class="field" value="' + (ARC.fromDate ? ARC.fromDate.slice(0, 7) : '') + '" ' +
+            'onchange="ARC.fromDate=this.value ? this.value+\'-01\' : \'\'; loadArchive()">' +
+        '</div>' +
+        '<div>' +
+          '<label class="field-label" for="arc-to">To</label>' +
+          '<input type="month" id="arc-to" class="field" value="' + (ARC.toDate ? ARC.toDate.slice(0, 7) : '') + '" ' +
+            'onchange="ARC.toDate=this.value ? this.value+\'-01\' : \'\'; loadArchive()">' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="flex flex-wrap items-center gap-x-4 gap-y-2">' +
+        '<label class="flex items-center gap-2 cursor-pointer text-xs" style="color: var(--mlc-muted);" ' +
+          'title="A document that was replaced when a newer one was published for the same issue. ' +
+          'It stays in Drive and in the version history, just hidden from the list by default.">' +
+          '<input type="checkbox" class="w-3.5 h-3.5 accent-amber-400" ' + (ARC.includeSuperseded ? 'checked' : '') +
+            ' onchange="ARC.includeSuperseded=this.checked; loadArchive()">' +
+          'Show Superseded Drafts' +
+          '<span class="help-dot" title="A superseded draft is an earlier upload for an issue that was ' +
+            'later replaced by a newer publish. Nothing is deleted — it just stays out of the way by default.">?</span>' +
+        '</label>' +
+        '<button class="btn btn-ghost btn-sm" onclick="clearArchiveFilters()">Clear Filters</button>' +
+      '</div>' +
+    '</section>' +
+
+    (ARC.loading
+      ? '<div class="flex justify-center py-14"><div class="spinner w-8 h-8"></div></div>'
+      : recordsSection(records) + unassignedSection(unassigned));
+}
+
+function recordsSection(records) {
+  if (!records.length) {
+    return '<section class="mlc-panel p-8 text-center mb-5">' +
+      '<p class="font-serif-body text-base mb-1" style="color: var(--mlc-stone);">Nothing dated here yet.</p>' +
+      '<p class="text-xs" style="color: var(--mlc-muted);">Documents appear once they are published, ' +
+      'or once you give an existing file an issue month below.</p></section>';
+  }
+
+  return '<section class="mb-6">' +
+    '<p class="text-xs tracking-[0.1em] uppercase font-bold mb-3" style="color: var(--mlc-muted);">' +
+      records.length + ' document' + (records.length === 1 ? '' : 's') + '</p>' +
+    '<div class="flex flex-col gap-2.5">' + records.map(recordRow).join('') + '</div>' +
+  '</section>';
+}
+
+function recordRow(r) {
+  const isLive = r.status === 'LIVE';
+
+  return '<article class="record-row ' + (isLive ? 'is-live' : '') + '">' +
+    // Info block first, full width — buttons never crowd it because they
+    // sit in their own row underneath, wrapping freely instead of squeezed
+    // into a fixed-width column beside truncated text.
+    '<div class="mb-3">' +
+      '<div class="flex flex-wrap items-center gap-2 mb-1.5">' +
+        statusPill(r.status) +
+      '</div>' +
+      '<p class="font-serif-body text-base leading-snug" style="color: var(--mlc-text);">' +
+        escapeHtml(r.issueName || r.archiveFileName) + '</p>' +
+      '<p class="text-xs mt-1" style="color: var(--mlc-muted);">' + formatDisplayDate(r.issueDate) + '</p>' +
+      '<p class="text-[11px] mt-1.5 mono break-all" style="color: #63605A;">' +
+        escapeHtml(r.archiveFileName) + '</p>' +
+      (r.notes ? '<p class="text-xs mt-1.5 italic" style="color: var(--mlc-blue);">' + escapeHtml(r.notes) + '</p>' : '') +
+      '<p class="text-[10px] mt-1.5" style="color: #55534E;">Published ' + escapeHtml(r.publishedAt) +
+        ' by ' + escapeHtml(r.publishedBy) + '</p>' +
+    '</div>' +
+
+    '<div class="flex flex-wrap gap-2 pt-3" style="border-top: 1px solid var(--mlc-border-soft);">' +
+      linkChips(r.links, r.originalLinks, r.issueName || r.archiveFileName, {
+        fileName: r.archiveFileName,
+        status: r.status,
+        issueDate: r.issueDate,
+        updated: r.publishedAt,
+        size: '',
+        notes: r.notes
+      }) +
+      (isLive
+        ? ''
+        : '<button class="btn btn-primary btn-sm" onclick="confirmMakeActive(\'' + r.recordId + '\')">Set as Live</button>') +
+      '<button class="btn btn-tertiary btn-sm" onclick="openEditRecord(\'' + r.recordId + '\')">Edit Details</button>' +
+      (isLive
+        ? ''
+        : '<button class="btn btn-warn btn-sm" onclick="confirmUnassign(\'' + r.recordId + '\')">Remove Date</button>') +
+      '<button class="btn btn-danger btn-sm icon-btn" onclick="confirmTrashRecord(\'' + r.recordId + '\')" ' +
+        'title="Delete File" aria-label="Delete File">' + ICONS.trash + '</button>' +
+    '</div>' +
+  '</article>';
+}
+
+function unassignedSection(files) {
+  if (!files || !files.length) return '';
+
+  return '<section class="mlc-panel p-5 sm:p-6">' +
+    '<div class="flex items-baseline gap-3 mb-2 flex-wrap">' +
+      '<h3 class="font-display text-xl" style="color: var(--mlc-gold-light);">Files Without a Service Date</h3>' +
+      '<span class="pill pill-unassigned">' + files.length + '</span>' +
+    '</div>' +
+    '<p class="text-xs mb-5" style="color: var(--mlc-muted);">' +
+      'These are in the archive folder but were filed outside this utility. Give one an issue month to bring it in ' +
+      '&mdash; after that it can be made the active document like any other.</p>' +
+    '<div class="flex flex-col gap-2.5">' +
+      files.map(f =>
+        '<article class="record-row">' +
+          '<div class="mb-3">' +
+            '<p class="font-serif-body text-sm break-all" style="color: var(--mlc-text);">' + escapeHtml(f.fileName) + '</p>' +
+            '<p class="text-[11px] mt-1" style="color: var(--mlc-muted);">' +
+              escapeHtml(f.folder) + ' &middot; ' + escapeHtml(f.size) + ' &middot; updated ' + escapeHtml(f.updated) + '</p>' +
+          '</div>' +
+          '<div class="flex flex-wrap gap-2 pt-3" style="border-top: 1px solid var(--mlc-border-soft);">' +
+            linkChips(f.links, null, f.fileName, {
+              fileName: f.fileName,
+              status: 'UNDATED',
+              updated: f.updated,
+              size: f.size
+            }) +
+            '<button class="btn btn-primary btn-sm" onclick="openAssignDate(\'' + f.fileId + '\', \'' +
+              escapeHtml(f.mode) + '\', true)">Publish As Live</button>' +
+            '<button class="btn btn-secondary btn-sm" onclick="openAssignDate(\'' + f.fileId + '\', \'' +
+              escapeHtml(f.mode) + '\')">Set Service Date</button>' +
+            '<button class="btn btn-danger btn-sm icon-btn" onclick="confirmTrashFile(\'' + f.fileId + '\', \'' +
+              escapeHtml(f.fileName).replace(/'/g, "\\'") + '\')" title="Delete File" aria-label="Delete File">' +
+              ICONS.trash + '</button>' +
+          '</div>' +
+        '</article>').join('') +
+    '</div>' +
+  '</section>';
+}
+
+// ---------- Search-as-you-type ----------
+
+let _archiveSearchTimer = null;
+
+/**
+ * Filters as the admin types, rather than waiting for Enter or a Search
+ * button — a short debounce so it doesn't fire a server call on every
+ * keystroke.
+ */
+function onArchiveQueryInput(value) {
+  ARC.query = value;
+  clearTimeout(_archiveSearchTimer);
+  _archiveSearchTimer = setTimeout(() => loadArchive(true), 350);
+}
+
+function clearArchiveQuery() {
+  ARC.query = '';
+  clearTimeout(_archiveSearchTimer);
+  loadArchive(true);
+}
+
+// ---------- Data ----------
+
+/**
+ * @param {boolean} quiet keep the current results on screen while a live
+ *   search-as-you-type request is in flight, instead of blanking the list
+ *   with a full spinner on every keystroke pause.
+ */
+async function loadArchive(quiet) {
+  // Re-rendering rebuilds #arc-q from scratch, which would otherwise steal
+  // focus and cursor position out from under someone still typing.
+  const focus = captureSearchFocus_();
+
+  if (!quiet) ARC.loading = true;
+  render();
+  try {
+    const res = await callServer('listArchive', {
+      mode: STATE.mode,
+      query: ARC.query || null,
+      fromDate: ARC.fromDate || null,
+      toDate: ARC.toDate || null,
+      includeSuperseded: ARC.includeSuperseded
+    });
+    STATE.archive.records = res.data.records || [];
+    STATE.archive.unassigned = res.data.unassigned || [];
+    STATE.archive.loaded = true;
+  } catch (e) {
+    toast(e.message, 'error');
+    STATE.archive.records = [];
+    STATE.archive.unassigned = [];
+    STATE.archive.loaded = true;
+  }
+  ARC.loading = false;
+  render();
+  restoreSearchFocus_(focus);
+}
+
+function captureSearchFocus_() {
+  const el = document.getElementById('arc-q');
+  if (!el || document.activeElement !== el) return null;
+  return { selectionStart: el.selectionStart, selectionEnd: el.selectionEnd };
+}
+
+function restoreSearchFocus_(focus) {
+  if (!focus) return;
+  const el = document.getElementById('arc-q');
+  if (!el) return;
+  el.focus();
+  try { el.setSelectionRange(focus.selectionStart, focus.selectionEnd); } catch (e) { /* ignore */ }
+}
+
+function clearArchiveFilters() {
+  ARC.query = '';
+  ARC.fromDate = '';
+  ARC.toDate = '';
+  ARC.includeSuperseded = false;
+  loadArchive();
+}
+
+// ---------- Make active ----------
+
+function confirmMakeActive(recordId) {
+  const record = STATE.archive.records.find(r => r.recordId === recordId);
+  if (!record) return;
+
+  showModal({
+    title: 'Set This As The Live Document?',
+    body: '<p>The live <strong>newsletter</strong> file will be replaced ' +
+      'with:</p><p class="mt-2 font-serif-body" style="color: var(--mlc-gold-light);">' +
+      escapeHtml(record.issueName || record.archiveFileName) + '<br>' +
+      '<span class="text-xs" style="color: var(--mlc-muted);">' + formatDisplayDate(record.issueDate) + '</span></p>' +
+      '<p class="mt-3">The file keeps its Drive ID, so every embed on the website updates automatically. ' +
+      'The document being replaced stays in the archive.</p>',
+    confirmLabel: 'Set as Live',
+    onConfirm: async () => {
+      showBusy('Setting as live…');
+      try {
+        const res = await callServer('restoreToLive', recordId);
+        await refreshLiveStatus();
+        invalidateDocumentLists();
+        toast(res.message || 'Done.', 'success');
+        render();
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        hideBusy();
+      }
+    }
+  });
+}
+
+// ---------- Edit a record ----------
+
+function openEditRecord(recordId) {
+  const r = STATE.archive.records.find(x => x.recordId === recordId);
+  if (!r) return;
+
+  showModal({
+    title: 'Edit details',
+    body:
+      '<label class="field-label" for="ed-month">Issue month</label>' +
+      '<input type="month" id="ed-month" class="field mb-4" value="' + r.issueDate.slice(0, 7) + '">' +
+      '<label class="field-label" for="ed-name">Issue name</label>' +
+      '<input type="text" id="ed-name" class="field mb-4" value="' + escapeHtml(r.issueName) + '">' +
+      '<label class="field-label" for="ed-notes">Notes</label>' +
+      '<input type="text" id="ed-notes" class="field mb-4" value="' + escapeHtml(r.notes) + '">' +
+      '<p class="field-hint mt-1">This changes the record only. The file itself is not touched or renamed.</p>',
+    confirmLabel: 'Save changes',
+    onConfirm: async () => {
+      // Read before the modal is torn down by closeModal(); showModal closes first,
+      // so capture values immediately.
+      showBusy('Saving…');
+      try {
+        const res = await callServer('updateRecord', window.__editPayload || {});
+        toast(res.message || 'Saved.', 'success');
+        invalidateDocumentLists();
+        render();
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        hideBusy();
+      }
+    }
+  });
+
+  // Capture the field values at click time, before the modal is removed.
+  const confirmBtn = document.getElementById('modal-confirm');
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', () => {
+      const monthEl = document.getElementById('ed-month');
+      window.__editPayload = {
+        recordId: recordId,
+        issueDate: monthEl.value ? monthEl.value + '-01' : r.issueDate,
+        issueName: document.getElementById('ed-name').value,
+        notes: document.getElementById('ed-notes').value
+      };
+    }, true);
+  }
+}
+
+// ---------- Removal ----------
+
+/**
+ * Detach the date only. Reversible in seconds — the file stays put and can be
+ * re-dated from the "files without a service date" list.
+ */
+function confirmUnassign(recordId) {
+  const r = STATE.archive.records.find(x => x.recordId === recordId);
+  if (!r) return;
+
+  showModal({
+    title: 'Remove this document from its date?',
+    body: '<p><span class="font-serif-body" style="color: var(--mlc-gold-light);">' +
+      escapeHtml(r.issueName || r.archiveFileName) + '</span> will no longer be recorded as the newsletter for ' +
+      '<strong>' + formatDisplayDate(r.issueDate) + '</strong>.</p>' +
+      '<div class="alert alert-info mt-4">The file itself is <strong>not</strong> deleted. It stays in the archive ' +
+      'folder and reappears under &ldquo;files without a service date&rdquo;, where you can give it a new date.</div>',
+    confirmLabel: 'Remove the date',
+    onConfirm: async () => {
+      showBusy('Removing date…');
+      try {
+        const res = await callServer('unassignRecord', recordId);
+        toast(res.message || 'Date removed.', 'success');
+        invalidateDocumentLists();
+        render();
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        hideBusy();
+      }
+    }
+  });
+}
+
+/** Trash an indexed document — file and record together. */
+/**
+ * Looked up from wherever the record is currently held in client state — the
+ * Archive tab's own list, or the sidebar's Document History, which can
+ * include superseded drafts the Archive tab's filters are currently hiding.
+ */
+function confirmTrashRecord(recordId) {
+  const r = STATE.archive.records.find(x => x.recordId === recordId) ||
+    (STATE.docHistory && STATE.docHistory.records.find(x => x.recordId === recordId));
+  if (!r) return;
+
+  const isLive = r.status === 'LIVE';
+  const extras = r.originalFileId ? ' and its Word source' : '';
+
+  showTypeToConfirmModal({
+    title: 'Delete this document from Drive?',
+    word: 'DELETE',
+    confirmLabel: 'Delete from Drive',
+    body:
+      '<p>This removes the archived file' + extras + ' from the Drive folder, and drops its record from the index.</p>' +
+      '<div class="mlc-panel-inset p-3 mt-4 mb-4">' +
+        '<p class="font-serif-body text-sm" style="color: var(--mlc-gold-light);">' +
+          escapeHtml(r.issueName || r.archiveFileName) + '</p>' +
+        '<p class="text-xs mt-1" style="color: var(--mlc-muted);">' + formatDisplayDate(r.issueDate) + '</p>' +
+        '<p class="text-[11px] mono mt-1.5" style="color: #63605A;">' + escapeHtml(r.archiveFileName) + '</p>' +
+      '</div>' +
+      (isLive
+        ? '<div class="alert alert-error mb-4"><strong>This is the active document.</strong> Anyone reading the ' +
+          'newsletter from the website is reading this one. Consider making another document active first.</div>'
+        : '') +
+      '<div class="alert alert-warn">The file goes to <strong>Drive\'s bin</strong>, where it can be restored for ' +
+      '30 days. After that Google removes it permanently. The live file that the website embeds is not affected.</div>',
+    onConfirm: () => doTrash({ recordId: recordId })
+  });
+}
+
+/** Trash a loose file that has no index record. */
+function confirmTrashFile(fileId, fileName) {
+  showTypeToConfirmModal({
+    title: 'Delete this file from Drive?',
+    word: 'DELETE',
+    confirmLabel: 'Delete from Drive',
+    body:
+      '<p>This file has no service date recorded, so nothing else refers to it.</p>' +
+      '<div class="mlc-panel-inset p-3 mt-4 mb-4">' +
+        '<p class="font-serif-body text-sm break-all" style="color: var(--mlc-gold-light);">' +
+          escapeHtml(fileName) + '</p></div>' +
+      '<div class="alert alert-warn">It goes to <strong>Drive\'s bin</strong> and can be restored for 30 days.</div>',
+    onConfirm: () => doTrash({ fileId: fileId })
+  });
+}
+
+async function doTrash(payload) {
+  showBusy('Deleting…');
+  try {
+    const res = await callServer('trashDocument', payload);
+
+    // Trashing the active document takes a second, separate confirmation.
+    if (res.data && res.data.needsLiveConfirmation) {
+      const r = res.data.record;
+      showTypeToConfirmModal({
+        title: 'This is the active document',
+        word: 'DELETE ANYWAY',
+        confirmLabel: 'Delete it anyway',
+        body: '<div class="alert alert-error mb-4">' +
+          '<strong>' + escapeHtml(r.issueName || r.archiveFileName) + '</strong> is the newsletter currently ' +
+          'published to the congregation.</div>' +
+          '<p>Deleting its archive copy leaves the live file in place — the website keeps working — but the ' +
+          'permanent record of this issue is gone from the archive.</p>',
+        onConfirm: () => doTrash(Object.assign({}, payload, { confirmLive: true }))
+      });
+      return;
+    }
+
+    toast(res.message || 'Moved to Drive\'s bin.', 'success');
+    invalidateDocumentLists();
+    await refreshLiveStatus();
+    render();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    hideBusy();
+  }
+}
+
+// ---------- Assign a date to an existing file ----------
+
+/**
+ * Give an undated file an issue month — optionally publishing it live in the
+ * same action.
+ *
+ * Every live document must be bound to an issue, so when the admin chooses
+ * "Publish As Live" on a file with no date, the month is asked for here first
+ * and the publish follows immediately. No document is ever live undated.
+ *
+ * @param {boolean} makeLive publish it as the live document once dated
+ */
+function openAssignDate(fileId, mode, makeLive) {
+  const live = makeLive === true;
+
+  showModal({
+    title: live ? 'Publish This Document As Live' : 'Set An Issue Month',
+    body:
+      (live
+        ? '<div class="alert alert-warn mb-4">This document has no issue month, and a published document ' +
+          'must always be bound to one. Set it here &mdash; it goes live immediately afterwards.</div>'
+        : '<p class="mb-4">Tell the system which month this file belongs to. The filename is left exactly as it is.</p>') +
+      '<label class="field-label" for="as-month">Issue Month</label>' +
+      '<input type="month" id="as-month" class="field mb-4" value="' + STATE.boot.defaultMonth + '">' +
+      '<label class="field-label" for="as-name">Issue Name <span class="normal-case tracking-normal">(optional)</span></label>' +
+      '<input type="text" id="as-name" class="field mb-4" placeholder="e.g. Second Quarter Edition">' +
+      (live
+        ? '<p class="field-hint mt-1">The live file keeps its link, so the website updates on its own.</p>'
+        : ''),
+    confirmLabel: live ? 'Set Month &amp; Publish As Live' : 'Add To Archive Index',
+    onConfirm: () => submitAssign(live)
+  });
+
+  // Capture the field values at click time, before the modal is torn down.
+  const confirmBtn = document.getElementById('modal-confirm');
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', () => {
+      const monthEl = document.getElementById('as-month');
+      const nameEl = document.getElementById('as-name');
+      window.__assignPayload = {
+        fileId: fileId,
+        mode: mode,
+        makeLive: live,
+        issueDate: monthEl.value ? monthEl.value + '-01' : '',
+        issueName: nameEl ? nameEl.value : ''
+      };
+    }, true);
+  }
+}
+
+async function submitAssign(live, force) {
+  const payload = Object.assign({}, window.__assignPayload || {}, force ? { confirmReplace: true } : {});
+  if (!payload.issueDate) { toast('Pick an issue month first.', 'error'); return; }
+
+  showBusy(live ? 'Publishing document…' : 'Saving…');
+  try {
+    const res = await callServer('assignFileToDate', payload);
+
+    if (res.data && res.data.needsConfirmation) {
+      showModal({
+        title: 'Already Recorded For That Issue',
+        body: '<p>Another document is already recorded for that issue month. Continuing marks it superseded ' +
+          '&mdash; nothing is deleted, and it stays in the archive.</p>',
+        confirmLabel: live ? 'Publish It Anyway' : 'Add Anyway',
+        onConfirm: () => submitAssign(live, true)
+      });
+      return;
+    }
+
+    toast(res.message || 'Added.', 'success');
+    invalidateDocumentLists();
+    if (live) await refreshLiveStatus();
+    render();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    hideBusy();
+  }
+}
+</script>

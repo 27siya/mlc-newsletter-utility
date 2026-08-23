@@ -1,0 +1,495 @@
+<style>
+  /* ==========================================================
+     MLC Comms Newsletter Utility — light theme.
+
+     Every colour is taken from the mlccomms website's own theme
+     palette, inspected directly via getComputedStyle(document.
+     documentElement) on https://mlccomms.wixstudio.com/my-site,
+     filtered to its --color_N custom properties: the pastel pink
+     rgb(255,191,199), the rose rgb(232,130,142) and
+     rgb(219,110,122), the #A36700 / #FFC561 / #FFE0AB golds, and
+     #2C3E50 navy. Typography matches the site too — Abril
+     Fatface for display, Roboto for everything that has to be
+     read at length.
+
+     NOTE ON VARIABLE NAMES: this project is a sibling of the MLC
+     Admin Documents Utility, which itself renamed a dark theme's
+     variables to light-theme VALUES while keeping the original
+     names. Here the --mlc-blue-* names are kept again, but now
+     hold RED/PINK values — the point is to keep the two projects'
+     CSS diffable/comparable even though the literal colours
+     differ. --mlc-red is deliberately NOT renamed to hold the
+     theme's primary colour: it stays the destructive/danger red,
+     a different red serving a different purpose from the pastel
+     rose used as the page's brand colour.
+     ========================================================== */
+  :root {
+    /* Grounds */
+    --mlc-page:        #FFBFC7;   /* site pastel pink/red */
+    --mlc-black:       #FFBFC7;   /* legacy alias — page ground */
+    --mlc-panel:       #FFFFFF;   /* cards */
+    --mlc-panel-2:     #FDF1F2;   /* insets, inputs */
+    --mlc-border:      #EFC3C8;
+    --mlc-border-soft: #F8DDE0;
+
+    /* Accents */
+    --mlc-gold:        #A36700;   /* accent text, focus, active tab */
+    --mlc-gold-light:  #7A4E00;   /* heading text — dark for contrast */
+    --mlc-gold-dark:   #E0A63F;   /* decorative rules and fills */
+    --mlc-gold-fill:   #FFC561;   /* button fill */
+    --mlc-gold-pale:   #FFE0AB;
+
+    --mlc-blue:        #E8828E;   /* site rose — rgb(232,130,142) */
+    --mlc-blue-soft:   #FFBFC7;   /* site pastel pink — rgb(255,191,199) */
+    --mlc-blue-deep:   #DB6E7A;   /* site deeper rose — rgb(219,110,122) */
+    --mlc-navy:        #2C3E50;
+
+    --mlc-red:         #C22D31;   /* destructive/danger — distinct from the brand rose above */
+    --mlc-green:       #1E7A3C;
+
+    /* Type */
+    --mlc-text:        #1C2430;   /* primary copy */
+    --mlc-stone:       #35404E;   /* secondary copy */
+    --mlc-muted:       #5A6472;   /* labels, meta */
+  }
+
+  body {
+    background-color: var(--mlc-page);
+    color: var(--mlc-text);
+    font-family: 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .font-display { font-family: 'Abril Fatface', Georgia, serif; font-weight: 400; }
+  .font-serif-body { font-family: 'Roboto', Arial, sans-serif; font-weight: 500; }
+
+  /* --- Shell --- */
+  .mlc-header {
+    background: #FFFFFF;
+    border-bottom: 3px solid var(--mlc-gold-fill);
+    box-shadow: 0 2px 10px rgba(44, 62, 80, 0.08);
+  }
+  .mlc-panel {
+    background-color: var(--mlc-panel);
+    border: 1px solid var(--mlc-border);
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(44, 62, 80, 0.06);
+  }
+  .mlc-panel-inset {
+    background-color: var(--mlc-panel-2);
+    border: 1px solid var(--mlc-border-soft);
+    border-radius: 8px;
+  }
+  .mlc-rule { border-color: var(--mlc-border); }
+
+  /* --- Tabs --- */
+  .tab-btn {
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    font-weight: 700;
+    padding: 11px 4px;
+    color: var(--mlc-muted);
+    border-bottom: 3px solid transparent;
+    transition: all 0.18s ease;
+  }
+  .tab-btn:hover { color: var(--mlc-navy); }
+  .tab-btn.active { color: var(--mlc-gold-light); border-bottom-color: var(--mlc-gold); }
+
+  /* --- Buttons --- */
+  .btn {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    font-size: 13px;
+    padding: 11px 20px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    transition: all 0.18s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+  .btn-primary {
+    background: var(--mlc-gold-fill);
+    color: #3A2400;
+    border-color: #E8A93C;
+    box-shadow: 0 1px 3px rgba(163, 103, 0, 0.25);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: #FFD489;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(163, 103, 0, 0.28);
+  }
+  /* Secondary but still meaningful actions: Upload Only, Set as Live, Run
+     Check, Set Service Date. Solid, so it reads as an action, not a no-op. */
+  .btn-secondary { background: var(--mlc-blue); color: #FFFFFF; border-color: var(--mlc-blue-deep); }
+  .btn-secondary:hover:not(:disabled) {
+    background: #EE97A2; transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(232, 130, 142, 0.3);
+  }
+
+  /* Neutral utility actions: Reset, Cancel, Search, Clear Filters, Try Again. */
+  .btn-ghost { background: #64748B; color: #FFFFFF; border-color: #56637A; }
+  .btn-ghost:hover:not(:disabled) {
+    background: #56637A; transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(44, 62, 80, 0.25);
+  }
+
+  /* Metadata/editing actions on an already-dated record — deliberately a
+     different hue from Set Service Date, which binds an undated one for the
+     first time. Same family (dark, administrative), different action. */
+  .btn-tertiary { background: var(--mlc-navy); color: #FFFFFF; border-color: #1E2A38; }
+  .btn-tertiary:hover:not(:disabled) {
+    background: #24313F; transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(44, 62, 80, 0.3);
+  }
+
+  /* A reversible removal (unbinding a date) — cautionary, not destructive.
+     Kept off red on purpose: red is reserved for "this goes to Drive's bin". */
+  .btn-warn { background: #B45309; color: #FFFFFF; border-color: #92400E; }
+  .btn-warn:hover:not(:disabled) {
+    background: #92400E; transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(180, 83, 9, 0.32);
+  }
+
+  /* Destructive actions: solid by default, not just on hover — a red button
+     should read as dangerous before it is ever touched. */
+  .btn-danger { background: var(--mlc-red); color: #FFFFFF; border-color: #A32629; }
+  .btn-danger:hover:not(:disabled) {
+    background: #A32629; transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(194, 45, 49, 0.32);
+  }
+  .btn-sm { padding: 7px 13px; font-size: 12px; }
+
+  /* --- Form controls --- */
+  .field-label {
+    display: block;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--mlc-muted);
+    font-weight: 700;
+    margin-bottom: 7px;
+  }
+  .field {
+    width: 100%;
+    background-color: #FFFFFF;
+    border: 1px solid var(--mlc-border);
+    border-radius: 6px;
+    padding: 11px 13px;
+    color: var(--mlc-text);
+    font-size: 15px;
+    font-family: 'Roboto', sans-serif;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--mlc-gold);
+    box-shadow: 0 0 0 3px rgba(255, 197, 97, 0.35);
+  }
+  .field::placeholder { color: #98A2B0; }
+  input[type="month"].field, input[type="date"].field { font-variant-numeric: tabular-nums; }
+  input[type="month"].field::-webkit-calendar-picker-indicator,
+  input[type="date"].field::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.65; }
+  input[type="month"].field::-webkit-calendar-picker-indicator:hover,
+  input[type="date"].field::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+  .field-hint { font-size: 13px; color: var(--mlc-muted); margin-top: 6px; line-height: 1.55; }
+
+  /* A locked field is pre-filled and correct; unlocking is a deliberate act. */
+  .label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .label-row .field-label { margin-bottom: 7px; }
+  .lock-toggle {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 3px 9px;
+    margin-bottom: 7px;
+    transition: all 0.16s ease;
+    white-space: nowrap;
+    /* Locked = neutral solid grey. Unlocked = solid gold — it is now an
+       active edit, and should look like one. */
+    background: #94A3B3;
+    color: #FFFFFF;
+  }
+  .lock-toggle.is-editing { background: var(--mlc-gold-fill); color: #3A2400; }
+  .lock-toggle:hover { filter: brightness(0.94); }
+
+  .field[readonly] {
+    background-color: #F3EDEB;
+    color: #5A6472;
+    cursor: default;
+    border-style: dashed;
+  }
+  .field[readonly]:focus { border-color: var(--mlc-border); box-shadow: none; }
+
+  /* The spelled-out issue period shown under the picker. */
+  .date-readout {
+    margin-top: 9px;
+    padding: 9px 13px;
+    background: #FFFBF3;
+    border: 1px solid var(--mlc-gold-pale);
+    border-left: 3px solid var(--mlc-gold-fill);
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--mlc-gold-light);
+  }
+
+  /* --- Dropzone --- */
+  .dropzone {
+    border: 2px dashed var(--mlc-blue-soft);
+    border-radius: 10px;
+    padding: 34px 20px;
+    text-align: center;
+    background-color: #FDF7F5;
+    transition: all 0.18s ease;
+    cursor: pointer;
+  }
+  .dropzone:hover, .dropzone.dragging {
+    border-color: var(--mlc-gold);
+    background-color: #FFFBF3;
+  }
+  .dropzone.has-file { border-style: solid; border-color: var(--mlc-green); background-color: #F1FAF3; }
+
+  /* --- Status pills --- */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+  .pill-live       { color: #14602E; border-color: #9AD6B0; background: #E4F6EA; }
+  .pill-archived   { color: var(--mlc-blue-deep); border-color: #F0B8BE; background: #FCEEF0; }
+  .pill-superseded { color: #6B7583; border-color: #CBD3DD; background: #F2F4F7; }
+  .pill-unassigned { color: #8A5A00; border-color: #F0CE8E; background: #FFF6E5; }
+
+  /* --- Records --- */
+  .record-row {
+    background-color: #FFFFFF;
+    border: 1px solid var(--mlc-border-soft);
+    border-left: 4px solid var(--mlc-border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    transition: all 0.16s ease;
+  }
+  .record-row:hover { border-color: var(--mlc-blue-soft); box-shadow: 0 2px 8px rgba(44, 62, 80, 0.09); }
+  .record-row.is-live { border-left-color: var(--mlc-green); }
+
+  /* --- Alerts --- */
+  .alert { border-radius: 8px; padding: 13px 16px; font-size: 14px; line-height: 1.6; border: 1px solid; }
+  .alert-warn    { background: #FFF6E5; border-color: #F0CE8E; color: #7A4E00; }
+  .alert-error   { background: #FCECEC; border-color: #EDB0B2; color: #92211F; }
+  .alert-success { background: #E4F6EA; border-color: #9AD6B0; color: #14602E; }
+  .alert-info    { background: #FCEEF0; border-color: #F0B8BE; color: var(--mlc-blue-deep); }
+
+  /* --- Spinner --- */
+  @keyframes mlc-spin { to { transform: rotate(360deg); } }
+  .spinner {
+    border: 3px solid var(--mlc-border);
+    border-top-color: var(--mlc-gold);
+    border-radius: 50%;
+    animation: mlc-spin 0.9s linear infinite;
+  }
+
+  @keyframes mlc-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .fade-in { animation: mlc-fade 0.26s ease-out; }
+
+  /* --- Scrollbars --- */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #F8DFE2; }
+  ::-webkit-scrollbar-thumb { background: var(--mlc-blue-soft); border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--mlc-blue); }
+
+  /* --- Modal --- */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(28, 36, 48, 0.55);
+    backdrop-filter: blur(3px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px; z-index: 200;
+  }
+  .modal-card {
+    background: #FFFFFF;
+    border: 1px solid var(--mlc-border);
+    border-top: 4px solid var(--mlc-gold-fill);
+    border-radius: 12px;
+    width: 100%; max-width: 540px;
+    box-shadow: 0 20px 50px rgba(28, 36, 48, 0.3);
+    max-height: 88vh; overflow-y: auto;
+  }
+
+  /* View / Word source: brighter rose — look at it in place. */
+  .link-chip {
+    font-size: 12px;
+    font-weight: 700;
+    color: #FFFFFF;
+    border: 1px solid var(--mlc-blue-deep);
+    background: var(--mlc-blue);
+    border-radius: 5px;
+    padding: 5px 10px;
+    transition: all 0.16s ease;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+  }
+  .link-chip:hover { background: #EE97A2; }
+
+  /* Download: darker, same rose family — take a copy away, a more deliberate
+     action than viewing in place. */
+  .link-chip-download {
+    background: var(--mlc-navy);
+    border-color: #1E2A38;
+  }
+  .link-chip-download:hover { background: #24313F; }
+
+  /* Open In Drive: leaves the app entirely for Drive's own page — green marks
+     it as the "go elsewhere" action, distinct from View (stays in the app)
+     and Download (rose family, stays in the browser). */
+  .link-chip-drive {
+    background: var(--mlc-green);
+    border-color: #145C2E;
+  }
+  .link-chip-drive:hover { background: #145C2E; }
+
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 0.92em; }
+
+  /* Icon-only buttons (Download, Delete) — square, so an icon doesn't sit in
+     an oddly wide text-shaped button. */
+  .icon-btn { padding: 6px 9px !important; }
+  .icon-btn svg { display: block; }
+
+  /* Publish/Archive content on the left, the Status sidebar on the right —
+     the sidebar stays visible, since there is no mode switch above the
+     Publish/Archive tabs to defer to; this tab row is the sole, centred,
+     primary navigation element. */
+  .content-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (min-width: 1024px) {
+    .content-grid { grid-template-columns: minmax(0, 1fr) 320px; }
+    .content-sidebar { position: sticky; top: 96px; }
+  }
+  .content-main { min-width: 0; }
+
+  /* Archive filters: auto-fit by the field's own natural width rather than a
+     fixed column count tied to viewport breakpoints — the sidebar narrows
+     this section on wide screens too, which a plain 3-column grid ignored. */
+  .filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+  }
+
+  /* The × clear button sitting inside a text field. */
+  .field-clear-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #CBD5E0;
+    color: #FFFFFF;
+    font-size: 15px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+  }
+  .field-clear-btn:hover { background: var(--mlc-muted); }
+
+  /* A small "?" that reveals its explanation on hover — for a control whose
+     name alone (e.g. "Superseded Drafts") doesn't say what it means. */
+  .help-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #CBD5E0;
+    color: #FFFFFF;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: help;
+    flex-shrink: 0;
+  }
+  .help-dot:hover { background: var(--mlc-blue); }
+
+  /* --- Help Guide slide-over panel --- */
+  .help-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(28, 36, 48, 0.55);
+    backdrop-filter: blur(2px);
+    z-index: 250;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .help-panel {
+    background: #FFFFFF;
+    width: 100%;
+    max-width: 720px;
+    height: 100%;
+    box-shadow: -8px 0 30px rgba(28, 36, 48, 0.3);
+    display: flex;
+    flex-direction: column;
+    animation: help-slide-in 0.22s ease-out;
+  }
+  @keyframes help-slide-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .help-panel-header {
+    padding: 16px 20px;
+    border-bottom: 2px solid var(--mlc-gold-fill);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .help-panel-body { flex: 1; min-height: 0; }
+  .help-panel-body iframe { width: 100%; height: 100%; border: 0; }
+
+  @media (max-width: 640px) {
+    .help-panel { max-width: 100%; }
+  }
+
+  /* --- Global busy overlay --- */
+  .busy-overlay {
+    position: fixed; inset: 0;
+    z-index: 400;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 191, 199, 0.55);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    animation: mlc-fade 0.15s ease-out;
+    text-align: center;
+    padding: 20px;
+  }
+  .busy-overlay p { max-width: 320px; }
+</style>

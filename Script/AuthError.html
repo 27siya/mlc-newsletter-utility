@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Not Authorised - Midrand Lutheran Church</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <?!= include('CSS_Styles'); ?>
+</head>
+<body class="min-h-screen flex items-center justify-center p-5">
+
+  <div class="mlc-panel p-8 sm:p-10 max-w-md w-full text-center">
+    <? if (logoUrl) { ?>
+      <img src="<?= logoUrl ?>" alt="Midrand Lutheran Church" class="h-20 w-20 mx-auto mb-5 object-contain">
+    <? } ?>
+
+    <h1 class="font-display text-2xl mb-2" style="color: var(--mlc-navy);">Midrand Lutheran Church</h1>
+    <p class="text-xs tracking-[0.2em] uppercase font-bold mb-7" style="color: var(--mlc-gold-light);">Comms Newsletter Utility</p>
+
+    <div class="alert alert-warn text-left mb-6">
+      <p class="font-semibold mb-1">This account cannot use the utility.</p>
+      <p>
+        <? if (userEmail) { ?>
+          You are signed in as <span class="mono"><?= userEmail ?></span>.
+        <? } else { ?>
+          You do not appear to be signed in to a Google account.
+        <? } ?>
+      </p>
+    </div>
+
+    <p class="font-serif-body text-sm mb-7" style="color: var(--mlc-stone);">
+      Publishing the newsletter is restricted to the church communications account. If you should
+      have access, sign in with the correct account.
+    </p>
+
+    <a href="<?= logoutAndLoginUrl ?>" class="btn btn-primary w-full">Switch Google account</a>
+  </div>
+
+</body>
+</html>

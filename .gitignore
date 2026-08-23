@@ -1,0 +1,15 @@
+# clasp — contains the script ID and local credentials
+.clasp.json
+.clasprc.json
+
+# OS / editor noise
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# Working files
+*.log
+node_modules/
