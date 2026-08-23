@@ -2,7 +2,7 @@
 # Bumps PORTAL_BUILD, pushes to Apps Script, and redeploys the web app.
 # Run from the Script directory: .\deploy.ps1
 
-$DEPLOYMENT_ID = "REPLACE_WITH_DEPLOYMENT_ID"
+$DEPLOYMENT_ID = "AKfycbwQO93_JtK11oxOTcp4JgIvIP2TNWRWY8wrVEP3-5VFEtSZ9CJg-43MHxjcxDcS_AAn"
 $CONFIG_FILE   = "$PSScriptRoot\Config.js"
 
 # --- 1. Bump PORTAL_BUILD ---

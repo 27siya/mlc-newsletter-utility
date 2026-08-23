@@ -6,7 +6,7 @@
  */
 
 // Build number — auto-bumped by deploy.ps1 on each deploy.
-const PORTAL_BUILD = 1;
+const PORTAL_BUILD = 2;
 
 const GLOBAL_CONFIG = {
   // Root Drive folder holding the live file and the archive subfolder.
@@ -17,10 +17,10 @@ const GLOBAL_CONFIG = {
     'comms@midrandlutheranchurch.co.za'
   ],
 
-  // Church logo (reused from the MLC Admin Documents Utility's own root
-  // folder — cross-project Drive file IDs work fine). Blank falls back to a
-  // by-name lookup in this project's own root folder.
-  logoFileId: '1HVvpPZuFwfy0KwXucvbMG9rytZPkberj',
+  // Church logo — "MLC Comms Logo.png", owned by comms@ in its own Drive
+  // folder. Blank falls back to a by-name lookup in this project's own root
+  // folder.
+  logoFileId: '1ZKCp-oEj033_5QHmthYMMZ4KZKJMPnP6',
 
   // Largest upload accepted from the browser. Kept low deliberately: a
   // Canva-exported newsletter PDF can run 50-100MB+ before compression, and
