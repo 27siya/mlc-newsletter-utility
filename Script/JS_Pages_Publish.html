@@ -113,7 +113,6 @@ function renderPublish(host) {
       '<div class="mb-5 sm:max-w-xs">' +
         '<label class="field-label" for="pub-month">Issue Month</label>' +
         '<input type="month" id="pub-month" class="field" value="' + PUB.month + '" onchange="PUB.month=this.value; onMonthChanged()">' +
-        (PUB.date ? '<div class="date-readout">' + formatDisplayDate(PUB.date) + '</div>' : '') +
         '<p class="field-hint">Defaults to the current month. This is what binds the file to an issue.</p>' +
       '</div>' +
 
