@@ -31,7 +31,7 @@ function liveCard(s) {
 
   return '<article class="mlc-panel p-5">' +
     '<div class="flex items-center justify-between mb-3">' +
-      '<h3 class="font-display text-lg" style="color: var(--mlc-text);">' + escapeHtml(s.label) + '</h3>' +
+      '<h3 class="font-display text-lg" style="color: var(--mlc-text);">Current Newsletter File</h3>' +
       '<span class="pill ' + (s.exists ? (s.placeholderActive ? 'pill-unassigned' : 'pill-live') : 'pill-superseded') + '">' +
         (s.exists ? (s.placeholderActive ? 'Disabled' : 'Live') : 'Not Created Yet') + '</span>' +
     '</div>' +
