@@ -48,9 +48,36 @@ function callServer(fnName, ...args) {
   });
 }
 
+// ---------- UI State Persistence ----------
+
+function loadUIState() {
+  const saved = localStorage.getItem('mlc-newsletter-ui-state');
+  if (saved) {
+    try {
+      const state = JSON.parse(saved);
+      if (typeof state.showSearch === 'boolean') ARC.showSearch = state.showSearch;
+      if (typeof state.showEmbed === 'boolean') STAT.showEmbed = state.showEmbed;
+      if (typeof state.showHistory === 'boolean') STAT.showHistory = state.showHistory;
+      if (typeof state.showDiagnostics === 'boolean') STAT.showDiagnostics = state.showDiagnostics;
+    } catch (e) {
+      // Ignore parse errors — just use defaults
+    }
+  }
+}
+
+function saveUIState() {
+  localStorage.setItem('mlc-newsletter-ui-state', JSON.stringify({
+    showSearch: ARC.showSearch,
+    showEmbed: STAT.showEmbed,
+    showHistory: STAT.showHistory,
+    showDiagnostics: STAT.showDiagnostics
+  }));
+}
+
 // ---------- Boot ----------
 
 document.addEventListener('DOMContentLoaded', () => {
+  loadUIState();
   if (BOOT_LOGO) {
     document.getElementById('boot-logo').src = BOOT_LOGO;
     document.getElementById('header-logo').src = BOOT_LOGO;
