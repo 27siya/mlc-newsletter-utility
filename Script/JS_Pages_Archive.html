@@ -14,7 +14,8 @@ const ARC = {
   fromDate: '',
   toDate: '',
   includeSuperseded: false,
-  loading: false
+  loading: false,
+  showSearch: true
 };
 
 function renderArchive(host) {
@@ -27,44 +28,53 @@ function renderArchive(host) {
 
   host.innerHTML =
     '<section class="mlc-panel p-5 sm:p-6 mb-5">' +
-      '<h2 class="font-display text-2xl mb-5" style="color: var(--mlc-gold-light);">Newsletter Archive</h2>' +
-
-      '<div class="mb-4">' +
-        '<label class="field-label" for="arc-q">Search</label>' +
-        '<div class="relative">' +
-          '<input type="text" id="arc-q" class="field pr-8" placeholder="Issue name, filename, notes" ' +
-            'value="' + escapeHtml(ARC.query) + '" oninput="onArchiveQueryInput(this.value)">' +
-          (ARC.query
-            ? '<button type="button" class="field-clear-btn" title="Clear search" onclick="clearArchiveQuery()">&times;</button>'
-            : '') +
-        '</div>' +
+      '<div class="flex items-center justify-between mb-5">' +
+        '<h2 class="font-display text-2xl" style="color: var(--mlc-gold-light);">Newsletter Archive</h2>' +
+        '<button class="text-xs font-bold" style="color: var(--mlc-blue-deep);" onclick="toggleArchiveSearch()">' +
+          (ARC.showSearch ? 'Hide Search' : 'Show Search') +
+        '</button>' +
       '</div>' +
 
-      '<div class="filter-grid mb-4">' +
-        '<div>' +
-          '<label class="field-label" for="arc-from">From</label>' +
-          '<input type="month" id="arc-from" class="field" value="' + (ARC.fromDate ? ARC.fromDate.slice(0, 7) : '') + '" ' +
-            'onchange="ARC.fromDate=this.value ? this.value+\'-01\' : \'\'; loadArchive()">' +
-        '</div>' +
-        '<div>' +
-          '<label class="field-label" for="arc-to">To</label>' +
-          '<input type="month" id="arc-to" class="field" value="' + (ARC.toDate ? ARC.toDate.slice(0, 7) : '') + '" ' +
-            'onchange="ARC.toDate=this.value ? this.value+\'-01\' : \'\'; loadArchive()">' +
-        '</div>' +
-      '</div>' +
+      (ARC.showSearch
+        ? '<div class="mb-4">' +
+            '<div class="mb-4">' +
+              '<label class="field-label" for="arc-q">Search</label>' +
+              '<div class="relative">' +
+                '<input type="text" id="arc-q" class="field pr-8" placeholder="Issue name, filename, notes" ' +
+                  'value="' + escapeHtml(ARC.query) + '" oninput="onArchiveQueryInput(this.value)">' +
+                (ARC.query
+                  ? '<button type="button" class="field-clear-btn" title="Clear search" onclick="clearArchiveQuery()">&times;</button>'
+                  : '') +
+              '</div>' +
+            '</div>' +
 
-      '<div class="flex flex-wrap items-center gap-x-4 gap-y-2">' +
-        '<label class="flex items-center gap-2 cursor-pointer text-xs" style="color: var(--mlc-muted);" ' +
-          'title="A document that was replaced when a newer one was published for the same issue. ' +
-          'It stays in Drive and in the version history, just hidden from the list by default.">' +
-          '<input type="checkbox" class="w-3.5 h-3.5 accent-amber-400" ' + (ARC.includeSuperseded ? 'checked' : '') +
-            ' onchange="ARC.includeSuperseded=this.checked; loadArchive()">' +
-          'Show Superseded Drafts' +
-          '<span class="help-dot" title="A superseded draft is an earlier upload for an issue that was ' +
-            'later replaced by a newer publish. Nothing is deleted — it just stays out of the way by default.">?</span>' +
-        '</label>' +
-        '<button class="btn btn-ghost btn-sm" onclick="clearArchiveFilters()">Clear Filters</button>' +
-      '</div>' +
+            '<div class="filter-grid mb-4">' +
+              '<div>' +
+                '<label class="field-label" for="arc-from">From</label>' +
+                '<input type="month" id="arc-from" class="field" value="' + (ARC.fromDate ? ARC.fromDate.slice(0, 7) : '') + '" ' +
+                  'onchange="ARC.fromDate=this.value ? this.value+\'-01\' : \'\'; loadArchive()">' +
+              '</div>' +
+              '<div>' +
+                '<label class="field-label" for="arc-to">To</label>' +
+                '<input type="month" id="arc-to" class="field" value="' + (ARC.toDate ? ARC.toDate.slice(0, 7) : '') + '" ' +
+                  'onchange="ARC.toDate=this.value ? this.value+\'-01\' : \'\'; loadArchive()">' +
+              '</div>' +
+            '</div>' +
+
+            '<div class="flex flex-wrap items-center gap-x-4 gap-y-2">' +
+              '<label class="flex items-center gap-2 cursor-pointer text-xs" style="color: var(--mlc-muted);" ' +
+                'title="A document that was replaced when a newer one was published for the same issue. ' +
+                'It stays in Drive and in the version history, just hidden from the list by default.">' +
+                '<input type="checkbox" class="w-3.5 h-3.5 accent-amber-400" ' + (ARC.includeSuperseded ? 'checked' : '') +
+                  ' onchange="ARC.includeSuperseded=this.checked; loadArchive()">' +
+                'Show Superseded Drafts' +
+                '<span class="help-dot" title="A superseded draft is an earlier upload for an issue that was ' +
+                  'later replaced by a newer publish. Nothing is deleted — it just stays out of the way by default.">?</span>' +
+              '</label>' +
+              '<button class="btn btn-ghost btn-sm" onclick="clearArchiveFilters()">Clear Filters</button>' +
+            '</div>' +
+          '</div>'
+        : '') +
     '</section>' +
 
     (ARC.loading
@@ -246,6 +256,11 @@ function clearArchiveFilters() {
   ARC.toDate = '';
   ARC.includeSuperseded = false;
   loadArchive();
+}
+
+function toggleArchiveSearch() {
+  ARC.showSearch = !ARC.showSearch;
+  render();
 }
 
 // ---------- Make active ----------
