@@ -29,17 +29,18 @@ function renderArchive(host) {
     '<section class="mlc-panel p-5 sm:p-6 mb-5">' +
       '<h2 class="font-display text-2xl mb-5" style="color: var(--mlc-gold-light);">Newsletter Archive</h2>' +
 
-      '<div class="filter-grid mb-4">' +
-        '<div>' +
-          '<label class="field-label" for="arc-q">Search</label>' +
-          '<div class="relative">' +
-            '<input type="text" id="arc-q" class="field pr-8" placeholder="Issue name, filename, notes" ' +
-              'value="' + escapeHtml(ARC.query) + '" oninput="onArchiveQueryInput(this.value)">' +
-            (ARC.query
-              ? '<button type="button" class="field-clear-btn" title="Clear search" onclick="clearArchiveQuery()">&times;</button>'
-              : '') +
-          '</div>' +
+      '<div class="mb-4">' +
+        '<label class="field-label" for="arc-q">Search</label>' +
+        '<div class="relative">' +
+          '<input type="text" id="arc-q" class="field pr-8" placeholder="Issue name, filename, notes" ' +
+            'value="' + escapeHtml(ARC.query) + '" oninput="onArchiveQueryInput(this.value)">' +
+          (ARC.query
+            ? '<button type="button" class="field-clear-btn" title="Clear search" onclick="clearArchiveQuery()">&times;</button>'
+            : '') +
         '</div>' +
+      '</div>' +
+
+      '<div class="filter-grid mb-4">' +
         '<div>' +
           '<label class="field-label" for="arc-from">From</label>' +
           '<input type="month" id="arc-from" class="field" value="' + (ARC.fromDate ? ARC.fromDate.slice(0, 7) : '') + '" ' +
