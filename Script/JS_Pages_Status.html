@@ -99,7 +99,10 @@ function liveCardBody(s, rec) {
         size: s.size
       }) +
     '</div>' +
-    '<button class="btn btn-danger btn-sm w-full" onclick="confirmDisableLive(\'' + s.mode + '\')">Disable Live</button>';
+    '<div class="flex gap-2 flex-wrap">' +
+      '<button class="btn btn-tertiary btn-sm flex-1" onclick="openEditLiveRecord(\'' + s.mode + '\')">Change Date &amp; Title</button>' +
+      '<button class="btn btn-danger btn-sm flex-1" onclick="confirmDisableLive(\'' + s.mode + '\')">Disable Live</button>' +
+    '</div>';
 }
 
 function embedCard(s) {
@@ -107,7 +110,7 @@ function embedCard(s) {
 
   return '<article class="mlc-panel p-5">' +
     '<button class="flex items-center justify-between w-full text-left" onclick="toggleEmbed()">' +
-      '<h3 class="font-display text-lg" style="color: var(--mlc-text);">Embed Code</h3>' +
+      '<h3 class="font-display text-lg" style="color: var(--mlc-text);">Links</h3>' +
       '<span class="text-xs font-bold" style="color: var(--mlc-blue-deep);">' + (STAT.showEmbed ? 'Hide' : 'Show') + '</span>' +
     '</button>' +
     (STAT.showEmbed
@@ -398,5 +401,43 @@ async function runChecks() {
   }
   STAT.running = false;
   render();
+}
+
+function openEditLiveRecord(modeKey) {
+  const s = (STATE.liveStatus || {})[modeKey];
+  const r = s && s.record;
+  if (!r) return;
+
+  showModal({
+    title: 'Edit live document',
+    body:
+      '<label class="field-label" for="el-month">Issue month</label>' +
+      '<input type="month" id="el-month" class="field mb-4" value="' + r.issueDate.slice(0, 7) + '">' +
+      '<label class="field-label" for="el-name">Issue name</label>' +
+      '<input type="text" id="el-name" class="field mb-4" value="' + escapeHtml(r.issueName) + '">' +
+      '<p class="field-hint mt-1">This changes the record only. The file itself is not touched or renamed.</p>',
+    confirmLabel: 'Save changes',
+    onConfirm: async () => {
+      showBusy('Saving…');
+      try {
+        const monthEl = document.getElementById('el-month');
+        const nameEl = document.getElementById('el-name');
+        const res = await callServer('updateRecord', {
+          recordId: r.recordId,
+          issueDate: monthEl.value ? monthEl.value + '-01' : r.issueDate,
+          issueName: nameEl.value,
+          notes: r.notes
+        });
+        toast(res.message || 'Saved.', 'success');
+        invalidateDocumentLists();
+        await refreshLiveStatus();
+        render();
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        hideBusy();
+      }
+    }
+  });
 }
 </script>

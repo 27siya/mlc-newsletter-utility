@@ -276,7 +276,11 @@ const ICONS = {
     'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">' +
     '<path d="M5 7h14"></path><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>' +
     '<path d="M7 7l1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12"></path>' +
-    '<path d="M10 11v6"></path><path d="M14 11v6"></path></svg>'
+    '<path d="M10 11v6"></path><path d="M14 11v6"></path></svg>',
+  drive: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M8 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"></path>' +
+    '<path d="M8 3v6"></path><path d="M16 3v6"></path></svg>'
 };
 
 /** "August 2026" — no day, since a newsletter issue is a month, not a date. */
@@ -332,7 +336,8 @@ function linkChips(links, originalLinks, title, meta) {
       links.viewUrl + '\', \'' + safeTitle + '\', \'' + safeFileName + '\', \'' + (m.status || '') + '\', \'' +
       (m.issueDate || '') + '\', \'' + jsAttrSafe_(m.updated) + '\', \'' + jsAttrSafe_(m.size) + '\', \'' +
       safeNotes + '\')">View</button>' +
-    '<a href="' + links.viewUrl + '" target="_blank" rel="noopener" class="link-chip link-chip-drive">Open In Drive</a>' +
+    '<a href="' + links.viewUrl + '" target="_blank" rel="noopener" class="link-chip link-chip-drive">' +
+      ICONS.drive + ' Open In Drive</a>' +
     '<a href="' + links.downloadUrl + '" target="_blank" rel="noopener" class="link-chip link-chip-download icon-btn" ' +
       'title="Download" aria-label="Download">' + ICONS.download + '</a>';
 
